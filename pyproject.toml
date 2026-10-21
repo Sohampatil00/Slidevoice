@@ -1,0 +1,16 @@
+[project]
+name = "slidevoice"
+version = "0.1.0"
+description = "Local presentation-to-narrated-video studio"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

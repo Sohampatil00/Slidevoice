@@ -1,0 +1,7 @@
+-r requirements.txt
+torch>=2.6,<3
+torchaudio>=2.6,<3
+transformers>=4.57.6,<5
+accelerate>=1.12,<2
+soundfile>=0.13,<1
+miocodec @ git+https://github.com/Aratako/MioCodec@77473544375d57e96cbdfd5d7d257e8f280fa8e3

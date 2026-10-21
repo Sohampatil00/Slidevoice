@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f7f2">
+  <title>SlideVoice — Your slides, spoken.</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#studio">Skip to studio</a>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="SlideVoice home"><span class="brand-mark">s<span>v</span></span>slidevoice<span class="brand-dot">.</span></a>
+    <p class="sidebar-label">YOUR WORKSPACE</p>
+    <button class="nav-item selected" id="studio-nav"><span aria-hidden="true">▦</span> Presentation studio <span class="mini-label">BETA</span></button>
+    <div class="project-heading"><p class="sidebar-label">PRESENTATIONS</p><button id="sidebar-new" class="icon-button" aria-label="Import a presentation">+</button></div>
+    <div id="project-list" class="project-list"><p class="muted small">Your presentations will live here.</p></div>
+    <div class="sidebar-bottom">
+      <div class="local-note"><span class="status-dot"></span><div><strong>Made on your machine</strong><p>Files stay local. AI is optional.</p></div></div>
+      <button id="setup-button" class="nav-item"><span aria-hidden="true">⚙</span> Connections & setup</button>
+      <div class="profile"><span class="avatar">Y</span><div><strong>Your personal studio</strong><p>English · Indian accent</p></div></div>
+    </div>
+  </aside>
+  <main id="studio">
+    <header class="topbar"><div><span class="breadcrumb">Workspace</span><span class="crumb-divider">/</span><span>Presentation studio</span></div><span class="local-badge"><span class="status-dot"></span> LOCAL-FIRST</span></header>
+    <section class="page-heading"><div><p class="eyebrow">LESS EDITING. MORE EXPLAINING.</p><h1>Your slides, spoken.</h1><p class="subtitle">From presentation to narrated video. Without the timeline juggling.</p></div><button id="new-project" class="button primary"><span aria-hidden="true">+</span> New presentation</button></section>
+    <section class="welcome" id="welcome"><div class="welcome-copy"><span class="pill">MEET YOUR NEW WORKFLOW</span><h2>You bring the knowledge.<br>We’ll handle the syncing.</h2><p>Import your slides, shape the explanation, and let your voice take it from there.</p><button id="try-demo" class="text-button">Try a 3-slide example <span aria-hidden="true">↗</span></button></div><div class="welcome-art" aria-hidden="true"><div class="paper paper-back"></div><div class="paper paper-front"><span class="paper-line long"></span><span class="paper-line"></span><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span class="paper-caption">A little more you.</span></div><span class="art-label">SLIDES + VOICE = DONE</span></div></section>
+    <div id="error" class="notice error" role="alert" hidden></div>
+    <section class="stats" aria-label="Presentation overview"><div class="stat"><span class="stat-icon">▤</span><div><span class="stat-label">Slides imported</span><strong id="slide-count">—</strong></div><span class="stat-hint">In perfect order</span></div><div class="stat"><span class="stat-icon">≋</span><div><span class="stat-label">Narration ready</span><strong id="audio-count">—</strong></div><span class="stat-hint">One clip per slide</span></div><div class="stat"><span class="stat-icon">◷</span><div><span class="stat-label">Video duration</span><strong id="duration-count">—</strong></div><span class="stat-hint" id="duration-hint">Timed to your voice</span></div></section>
+    <section class="workspace card">
+      <div class="section-heading"><div><h2 id="project-title">Your next great explanation</h2><p id="project-subtitle">Start with a presentation or explore the example.</p></div><span class="pill neutral" id="project-status">READY WHEN YOU ARE</span></div>
+      <ol class="steps" aria-label="Workflow"><li id="step-import"><span>1</span> Import slides</li><li id="step-script"><span>2</span> Shape the script</li><li id="step-voice"><span>3</span> Add your voice</li><li id="step-export"><span>4</span> Make a video</li></ol>
+      <div id="job-panel" class="job-panel" role="status" aria-live="polite" hidden><div><span id="job-message"></span><strong id="job-percent"></strong></div><progress id="job-progress" max="100" value="0"></progress></div>
+      <div id="empty-state" class="empty-state"><span class="upload-glyph" aria-hidden="true">↥</span><h3>A great video starts with your slides.</h3><p>Drop a PPTX, PDF, or slide images here.<br>We’ll keep the order and take care of the rest.</p><button id="empty-upload" class="button primary">Choose presentation <span aria-hidden="true">↗</span></button><span class="small muted">Up to 100 slides · 80 MB total · PNG, JPG and WebP also welcome</span></div>
+      <div id="full-script-bar" class="full-script-bar" hidden><div><strong>Already have the whole script?</strong><p>Paste it once and assign the narration across your slides.</p></div><button id="import-script" class="button small-button">Import full script</button></div>
+      <div id="editor" class="editor" hidden>
+        <nav class="slide-rail" aria-label="Slides"><div class="rail-heading">YOUR SLIDES <span id="rail-count"></span></div><div id="slides"></div></nav>
+        <div class="slide-workbench"><div class="slide-preview"><img id="slide-image" alt="Selected slide"><span id="slide-number" class="slide-number"></span></div><div class="editor-toolbar"><span class="editor-section-label">THE EXPLANATION</span><button id="ai-one" class="text-button">✧ Write with Claude</button></div><label for="slide-title" class="sr-only">Slide title</label><input id="slide-title" class="slide-title-input" maxlength="160" placeholder="Slide title"><label for="script" class="sr-only">Narration script in English</label><textarea id="script" maxlength="12000" placeholder="What would you say if you were explaining this slide? Write it here, paste a script, or let Claude help."></textarea><div class="script-footer"><span id="word-count" class="small muted">0 words</span><span id="save-status" class="small muted">All changes saved</span><button id="save-script" class="button small-button">Save script</button></div><details class="source-details"><summary>Slide text & speaker notes</summary><pre id="source-text"></pre></details><div id="audio-preview" class="audio-preview" hidden><div><span class="editor-section-label">NARRATION PREVIEW</span><span id="audio-source" class="small muted"></span></div><audio id="audio-player" controls preload="none"></audio></div><div class="slide-actions"><label class="text-button upload-audio" for="audio-upload">↥ Upload your recording</label><input type="file" id="audio-upload" accept="audio/*" hidden><button id="audio-one" class="text-button">↻ Generate this slide’s audio</button></div></div>
+      </div>
+    </section>
+    <section id="controls" class="controls" hidden>
+      <div class="card voice-card">
+        <div class="section-heading"><div><p class="eyebrow">SOUND LIKE YOURSELF</p><h2>A voice that feels like you.</h2></div><span class="voice-symbol" aria-hidden="true">≋</span></div>
+        <label for="voice-provider">Narration source</label>
+        <select id="voice-provider"><option value="indic_mio">Indic-MIO · local voice cloning</option><option value="preview">Free Mac preview · Indian English · not your voice</option></select>
+        <div id="personal-voice">
+          <div class="field-heading"><label for="reference-mode">Voice reference</label></div>
+          <select id="reference-mode"><option value="sample">My own voice sample</option><option value="preset">Preset on my Indic-MIO server</option></select>
+          <label class="checkbox"><input type="checkbox" id="voice-consent"><span>I own this recording or have permission to clone and use this voice.</span></label>
+          <div id="sample-voice">
+            <p class="field-help">Upload 3–20 seconds of clean English speech in your natural Indian accent. One speaker, no music. The sample stays on your computer unless you configure a remote server.</p>
+            <label class="button small-button" for="reference-upload">↥ Upload voice sample</label><input id="reference-upload" type="file" accept="audio/*" hidden>
+            <p id="reference-status" class="field-help">No voice sample uploaded yet.</p>
+            <audio id="reference-player" controls preload="none" hidden></audio>
+          </div>
+          <div id="preset-voice" hidden><div class="field-heading"><label for="voice-id">Indic-MIO preset ID</label><button id="load-voices" class="text-button">Load server presets</button></div><input id="voice-id" placeholder="Choose a preset from your server" maxlength="120" list="voice-options" autocomplete="off"><datalist id="voice-options"></datalist><p class="field-help">Presets belong to the configured MioTTS server. The bundled local server uses your uploaded sample instead. Check any preset’s usage licence.</p></div>
+        </div>
+        <div class="field-heading speed-row"><label for="voice-speed">Speaking pace</label><output id="speed-label" for="voice-speed">1.0×</output></div><input id="voice-speed" type="range" min="0.7" max="1.2" step="0.05" value="1"><p class="field-help" id="voice-help">Indic-MIO runs on your local model server. Audition one slide first.</p><button id="generate-audio" class="button primary full-width">Generate narration <span aria-hidden="true">↗</span></button><p class="small muted footnote">Unchanged audio is reused. Uploaded recordings are kept.</p>
+      </div>
+      <div class="card export-card"><div class="section-heading"><div><p class="eyebrow">THE FINISHING TOUCH</p><h2>Let’s put it all together.</h2></div><span class="export-symbol" aria-hidden="true">↗</span></div><p class="body-copy">Every slide stays on screen for its narration, plus a little breathing room. No manual timestamps.</p><div class="two-fields"><div><label for="resolution">Video quality</label><select id="resolution"><option value="1080p">Full HD · 1080p</option><option value="720p">HD · 720p</option></select></div><div><label for="pause">Pause between slides</label><select id="pause"><option value="0">No pause</option><option value="0.3">0.3 seconds</option><option value="0.5" selected>0.5 seconds</option><option value="1">1 second</option><option value="2">2 seconds</option></select></div></div><div class="script-generation"><div><strong>Need a first draft?</strong><p>Claude can fill in slides without scripts.</p></div><button id="ai-all" class="button small-button">✧ Draft missing scripts</button></div><label for="instructions" class="small muted">Direction for Claude (optional)</label><input id="instructions" maxlength="2000" placeholder="e.g. Explain simply, around 45 seconds per slide"><button id="render-video" class="button dark full-width">Create video <span aria-hidden="true">↗</span></button><div id="downloads" class="downloads" hidden><div class="success-message"><span>✓</span><strong>Your explanation is ready.</strong></div><video id="video-player" controls preload="metadata"></video><div><a id="download-video" class="button primary" download="presentation.mp4">Download MP4 ↓</a><a id="download-timings" class="text-button" download="timings.json">Slide timestamps ↓</a></div></div></div>
+    </section>
+    <footer>Made for the way you explain things.<span>Local files. Your voice. A little less busywork.</span></footer>
+  </main>
+  <input type="file" id="deck-upload" accept=".pptx,.pdf,.png,.jpg,.jpeg,.webp" multiple hidden>
+  <dialog id="setup-dialog"><div class="dialog-heading"><div><p class="eyebrow">YOUR STUDIO, CONNECTED</p><h2>A quick setup.</h2></div><button id="close-setup" class="icon-button" aria-label="Close setup">×</button></div><p>Start with the demo or upload a PDF. You can paste scripts and upload recordings without any paid services.</p><div id="connection-status"></div><h3>Indic-MIO & your own voice</h3><ol><li>Run <code>indic-mio.command</code> in the SlideVoice folder. First launch downloads model weights and optional Python packages.</li><li>Wait for the model server to finish loading. Keep its terminal open.</li><li>Import slides, select <strong>Indic-MIO</strong>, confirm voice permission, and upload 3–20 seconds of your own speech.</li><li>Generate one slide’s narration to check accent, pronunciation, and similarity before generating the full deck.</li><li>Optionally add <code>ANTHROPIC_API_KEY</code> in <code>.env</code> for Claude scripts. Restart the studio after changing configuration.</li></ol><p class="notice">Local Indic-MIO requires no speech API key. Scripts and reference audio go to the configured model server, defaulting to your own computer. A remote server receives both. Claude script generation still sends slide content to Anthropic and may incur charges. Keys stay on the backend.</p><p class="small muted">Set <code>INDIC_MIO_BASE_URL</code> to use an existing MioTTS-Inference-compatible server running SPRINGLab/Indic-Mio. Static slides do not preserve PowerPoint animations or videos.</p></dialog>
+  <dialog id="full-script-dialog" aria-labelledby="full-script-title">
+    <div class="dialog-heading"><div><p class="eyebrow">ONE SCRIPT, ALL YOUR SLIDES</p><h2 id="full-script-title">Import your full script.</h2></div><button id="close-full-script" class="icon-button" aria-label="Close full script import">×</button></div>
+    <p>Split your narration across the slides, then review each section before saving.</p>
+    <label for="full-script-input">Full narration script</label>
+    <textarea id="full-script-input" maxlength="120000" placeholder="Slide 1&#10;Your introduction…&#10;&#10;Slide 2&#10;Your next explanation…"></textarea>
+    <label for="split-method">How to assign it</label>
+    <select id="split-method"><option value="headings">Use Slide 1, Slide 2 headings · local</option><option value="claude">Match slide content with Claude</option></select>
+    <p id="split-help" class="field-help"></p>
+    <div id="full-script-error" class="notice error" role="alert" hidden></div>
+    <div class="import-preview-action"><span id="split-status" class="small muted" role="status" aria-live="polite"></span><button id="preview-script" class="button primary">Preview slide assignments</button></div>
+    <section id="script-assignment-preview" aria-label="Script assignments" hidden>
+      <h3>Review your slide scripts</h3><p id="assignment-summary" class="field-help" aria-live="polite"></p>
+      <p class="field-help">Applying replaces the slide scripts. Narration for changed scripts and the previous video will need to be generated again.</p>
+      <div id="script-assignments"></div>
+      <button id="apply-script" class="button primary full-width">Apply scripts to all slides</button>
+    </section>
+  </dialog>
+</body>
+</html>
