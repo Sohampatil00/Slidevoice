@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import tomllib
 from importlib import metadata
 from pathlib import Path
@@ -136,7 +137,15 @@ def main():
         applications = stage / "Applications"
         if not applications.is_symlink():
             applications.symlink_to("/Applications")
-        run("hdiutil", "create", "-volname", "SlideVoice", "-srcfolder", stage, "-ov", "-format", "UDZO", dmg)
+        for attempt in range(3):
+            try:
+                run("hdiutil", "create", "-volname", "SlideVoice", "-srcfolder", stage, "-ov", "-format", "UDZO", dmg)
+                break
+            except subprocess.CalledProcessError:
+                dmg.unlink(missing_ok=True)
+                if attempt == 2:
+                    raise
+                time.sleep(2**attempt)
     else:
         shutil.make_archive(str(ROOT / "dist/SlideVoice-Windows-x64"), "zip", ROOT / "dist", "SlideVoice")
         compiler = shutil.which("iscc")
