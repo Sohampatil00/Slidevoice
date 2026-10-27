@@ -43,6 +43,12 @@ def test_failed_model_setup_can_retry_without_losing_projects(monkeypatch):
     assert core.read_project(project["id"])["title"] == "Keep this presentation"
 
 
+def test_completed_setup_is_not_repeated(monkeypatch):
+    desktop_setup.report("complete", "Local components are ready.")
+    monkeypatch.setattr(desktop_setup.lux_bootstrap, "prepare_runtime", lambda: pytest.fail("setup repeated"))
+    desktop_setup.prepare_all()
+
+
 def test_interrupted_setup_is_retryable():
     desktop_setup.report("running", "Preparing")
     value = json.loads(desktop_setup.status_path().read_text())

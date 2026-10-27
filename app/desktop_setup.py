@@ -172,11 +172,18 @@ def prepare_office():
     if sys.platform != "win32":
         return  # The Windows installer owns automatic LibreOffice provisioning.
     cache = desktop_directories()["cache"]
+    target = cache / "libreoffice" / OFFICE_VERSION
+    candidates = list(target.rglob("program/soffice.exe"))
+    if candidates:
+        from .desktop_settings import DesktopSettings, save_settings
+
+        save_settings(DesktopSettings(), extra_updates={"SOFFICE_PATH": str(candidates[0])})
+        run_child([str(candidates[0]), "--headless", "--version"])
+        return
     downloads = cache / "downloads"
     downloads.mkdir(parents=True, exist_ok=True)
     installer = downloads / OFFICE_NAME
     verified_download(OFFICE_URL, installer, OFFICE_SHA256)
-    target = cache / "libreoffice" / OFFICE_VERSION
     target.mkdir(parents=True, exist_ok=True)
     log = core.DATA / "logs" / "libreoffice-setup.log"
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -200,7 +207,9 @@ def prepare_office():
 
 def prepare_all():
     lock = FileLock(core.DATA / "setup.lock")
-    with lock.acquire(timeout=0):
+    with lock.acquire(timeout=3600):
+        if read_status()["status"] == "complete":
+            return
         try:
             report("running", "Preparing Python and LuxTTS dependencies. Internet is required…")
             python, worker = lux_bootstrap.prepare_runtime()
