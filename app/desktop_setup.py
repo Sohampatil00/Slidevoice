@@ -23,6 +23,7 @@ OFFICE_URL = (
     f"https://download.documentfoundation.org/libreoffice/stable/{OFFICE_VERSION}/win/x86_64/{OFFICE_NAME}"
 )
 OFFICE_SHA256 = "c6298b10cfa1748bcbedad94c62ce771e240e5021bfd6d7a967cd571b04b5312"
+OFFICE_PREPARE_TIMEOUT_SECONDS = 60 * 60
 
 
 def status_path():
@@ -148,7 +149,7 @@ def download_ranges(url, partial, total, checksum, chunk_size=8 * 1024 * 1024):
                 shutil.copyfileobj(piece, output)
 
 
-def run_child(command, **options):
+def run_child(command, timeout=1800, **options):
     with subprocess.Popen(
         command,
         stdin=subprocess.DEVNULL,
@@ -158,7 +159,7 @@ def run_child(command, **options):
         **options,
     ) as process:
         try:
-            result = process.wait(timeout=1800)
+            result = process.wait(timeout=timeout)
         except BaseException:
             processes.stop_process_tree(process)
             raise
@@ -184,7 +185,8 @@ def prepare_office():
     # An administrative image extracts the renderer into our writable cache.
     # Do not change the user's Office defaults or uninstall their office suite.
     run_child(
-        ["msiexec.exe", "/a", str(installer), "/qn", "/norestart", f"TARGETDIR={target}", "/L*v", str(log)]
+        ["msiexec.exe", "/a", str(installer), "/qn", "/norestart", f"TARGETDIR={target}", "/L*v", str(log)],
+        timeout=OFFICE_PREPARE_TIMEOUT_SECONDS,
     )
     candidates = list(target.rglob("program/soffice.exe"))
     if not candidates:
