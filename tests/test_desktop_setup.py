@@ -108,3 +108,37 @@ def test_parallel_download_resumes_completed_chunks(tmp_path, monkeypatch):
     desktop_setup.download_ranges("https://example.invalid", target, len(content), checksum, chunk_size=16)
     assert target.read_bytes() == content
     assert requests == [16]
+
+
+def test_private_renderer_gets_only_x64_libraries_and_console_launcher(tmp_path, monkeypatch):
+    import struct
+
+    from app import desktop_settings
+
+    target = tmp_path / "office"
+    program = target / "program"
+    program.mkdir(parents=True)
+    renderer = program / "soffice.exe"
+    renderer.touch()
+    renderer.with_suffix(".com").touch()
+    system = target / "System64"
+    system.mkdir()
+
+    def pe(machine):
+        data = bytearray(128)
+        data[:2] = b"MZ"
+        struct.pack_into("<I", data, 0x3C, 64)
+        data[64:70] = b"PE\0\0" + struct.pack("<H", machine)
+        return data
+
+    (system / "runtime.dll").write_bytes(pe(0x8664))
+    (system / "wrong-architecture.dll").write_bytes(pe(0xAA64))
+    updates = []
+    commands = []
+    monkeypatch.setattr(desktop_settings, "save_settings", lambda settings, **kw: updates.append(kw))
+    monkeypatch.setattr(desktop_setup, "run_child", lambda command, **kw: commands.append((command, kw)))
+    desktop_setup.configure_office(target, renderer)
+    assert (program / "runtime.dll").read_bytes() == pe(0x8664)
+    assert not (program / "wrong-architecture.dll").exists()
+    assert updates[0]["extra_updates"]["SOFFICE_PATH"].endswith("soffice.com")
+    assert commands[0][1]["timeout_seconds"] == 90

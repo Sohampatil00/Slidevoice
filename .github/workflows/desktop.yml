@@ -45,6 +45,13 @@ jobs:
         run: |
           $p = Start-Process dist/SlideVoice/SlideVoice.exe -ArgumentList '--smoke-test' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Packaged backend failed: $($p.ExitCode)" }
+      - name: Restore prepared Windows component cache
+        if: runner.os == 'Windows'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/AppData/Local/SlideVoice/Cache
+          key: windows-components-${{ hashFiles('requirements-lux.txt') }}-${{ github.run_id }}
+          restore-keys: windows-components-${{ hashFiles('requirements-lux.txt') }}-
       - name: Verify complete Windows dependency setup
         timeout-minutes: 60
         if: runner.os == 'Windows'
@@ -69,6 +76,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/test_windows_installer.ps1
+      - name: Cache Windows components for setup retries
+        if: always() && runner.os == 'Windows'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/AppData/Local/SlideVoice/Cache
+          key: windows-components-${{ hashFiles('requirements-lux.txt') }}-${{ github.run_id }}
       - name: Collect Windows runtime logs
         if: always() && runner.os == 'Windows'
         shell: pwsh

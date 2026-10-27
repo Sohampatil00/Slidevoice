@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from pptx import Presentation
 
 from .core import MAX_SLIDES, WorkflowError
-from .processes import background_options
+from .processes import background_options, run_external
 
 FPS = 30
 
@@ -46,12 +46,17 @@ def soffice():
             )
         ],
     ]
-    return next((path for path in candidates if path and Path(path).is_file()), None)
+    selected = next((path for path in candidates if path and Path(path).is_file()), None)
+    if selected and sys.platform == "win32" and Path(selected).suffix.lower() == ".exe":
+        console = Path(selected).with_suffix(".com")
+        if console.is_file():
+            return str(console)
+    return selected
 
 
 def run_command(arguments, timeout=300):
     try:
-        completed = subprocess.run(
+        completed = run_external(
             arguments, capture_output=True, timeout=timeout, check=False, **background_options()
         )
     except subprocess.TimeoutExpired as error:

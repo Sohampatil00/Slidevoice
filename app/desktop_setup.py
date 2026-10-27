@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import threading
@@ -176,8 +177,8 @@ def download_ranges(url, partial, total, checksum, chunk_size=8 * 1024 * 1024):
                 shutil.copyfileobj(piece, output)
 
 
-def run_child(command, **options):
-    with subprocess.Popen(
+def run_child(command, timeout_seconds=1800, **options):
+    with processes.external_popen(
         command,
         stdin=subprocess.DEVNULL,
         stdout=sys.stdout,
@@ -186,7 +187,7 @@ def run_child(command, **options):
         **options,
     ) as process:
         try:
-            result = process.wait(timeout=1800)
+            result = process.wait(timeout=timeout_seconds)
         except BaseException:
             processes.stop_process_tree(process)
             raise
@@ -195,19 +196,21 @@ def run_child(command, **options):
 
 
 def prepare_office():
-    if media.soffice():
-        return
     if sys.platform != "win32":
         return  # The Windows installer owns automatic LibreOffice provisioning.
     cache = desktop_directories()["cache"]
     target = cache / "libreoffice" / OFFICE_VERSION
     candidates = list(target.rglob("program/soffice.exe"))
-    if candidates:
-        from .desktop_settings import DesktopSettings, save_settings
-
-        save_settings(DesktopSettings(), extra_updates={"SOFFICE_PATH": str(candidates[0])})
-        run_child([str(candidates[0]), "--headless", "--version"])
+    existing = media.soffice()
+    if existing and not candidates:
+        run_child([existing, "--headless", "--version"], timeout_seconds=90)
         return
+    if candidates:
+        try:
+            configure_office(target, candidates[0])
+            return
+        except (OSError, RuntimeError, subprocess.TimeoutExpired):
+            report("running", "Repairing the incomplete PowerPoint renderer…")
     downloads = cache / "downloads"
     downloads.mkdir(parents=True, exist_ok=True)
     installer = downloads / OFFICE_NAME
@@ -224,13 +227,30 @@ def prepare_office():
     candidates = list(target.rglob("program/soffice.exe"))
     if not candidates:
         raise RuntimeError("LibreOffice extraction did not produce its renderer. Retry setup.")
-    renderer = candidates[0]
+    configure_office(target, candidates[0])
+    installer.unlink(missing_ok=True)
+
+
+def configure_office(target, renderer):
+    # Administrative extraction leaves Visual C++ DLLs in System64 rather than
+    # beside the renderer. Copy only verified x64 PE libraries into its directory.
+    for library in (target / "System64").glob("*.dll"):
+        with library.open("rb") as binary:
+            if binary.read(2) != b"MZ":
+                continue
+            binary.seek(0x3C)
+            offset = struct.unpack("<I", binary.read(4))[0]
+            binary.seek(offset)
+            if binary.read(6) != b"PE\0\0d\x86":
+                continue
+        shutil.copy2(library, renderer.parent / library.name)
+    if renderer.with_suffix(".com").is_file():
+        renderer = renderer.with_suffix(".com")
     from .desktop_settings import DesktopSettings, save_settings
 
     # Persist through the same atomic writer used for desktop configuration.
     save_settings(DesktopSettings(), extra_updates={"SOFFICE_PATH": str(renderer)})
-    run_child([str(renderer), "--headless", "--version"])
-    installer.unlink(missing_ok=True)
+    run_child([str(renderer), "--headless", "--version"], timeout_seconds=90)
 
 
 def prepare_all():

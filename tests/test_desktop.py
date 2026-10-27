@@ -194,3 +194,38 @@ def test_native_bridge_policy_is_desktop_only(client, monkeypatch):
     assert "script-src 'self' 'unsafe-eval'" in policy
     assert "unsafe-inline" not in policy
     assert "frame-ancestors 'none'" in policy
+
+
+def test_external_windows_spawn_restores_dll_search_after_failure(tmp_path, monkeypatch):
+    import ctypes
+    import os
+
+    events = []
+
+    class Function:
+        def __init__(self, callback):
+            self.callback = callback
+
+        def __call__(self, *args):
+            return self.callback(*args)
+
+    class Kernel:
+        SetDllDirectoryW = Function(lambda value: events.append(("dll", value)) or 1)
+        SetErrorMode = Function(lambda value: events.append(("errors", value)) or 0)
+        GetDllDirectoryW = Function(lambda size, buffer: setattr(buffer, "value", str(tmp_path)))
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *a, **k: Kernel(), raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+
+    def fail(*args, **kwargs):
+        assert str(tmp_path / "bin") not in kwargs["env"]["PATH"]
+        raise OSError("cannot start")
+
+    monkeypatch.setattr(subprocess, "Popen", fail)
+    with pytest.raises(OSError, match="cannot start"):
+        processes.external_popen(
+            ["soffice.com"], env={"PATH": str(tmp_path / "bin") + os.pathsep + "/system"}
+        )
+    assert events == [("errors", 0x8003), ("dll", None), ("dll", str(tmp_path)), ("errors", 0)]
