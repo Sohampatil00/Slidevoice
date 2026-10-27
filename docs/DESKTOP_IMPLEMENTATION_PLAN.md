@@ -40,5 +40,12 @@ Initial targets: macOS Apple Silicon and Windows x64. Keep the existing browser 
 - [x] macOS development artifact built locally; native window, sample project, and shutdown verified.
 - [x] Windows installer workflow prepared; Windows dependency resolution checked from macOS.
 - [x] macOS clean runtime installation and model synthesis verified; bundled FFmpeg rendered a three-slide MP4.
-- [ ] Windows artifact built and executed on Windows.
+- [x] Windows 0.1.1 artifact built and installer lifecycle executed on native Windows CI.
 - [ ] Public release license, signing, and publishing approved.
+
+
+## Guided Windows setup (0.1.2)
+
+The default installer task prepares WebView2, managed Python, LuxTTS dependencies, narration and transcription models, and a private LibreOffice renderer. Initial setup needs internet and several GB of disk space. The installer offers retry after a failed download; Settings > Prepare / repair components runs the same setup without reinstalling the app. Verified cached downloads and installed runtime packages are reused. Gemini remains optional and requires the user's own API key and internet for script generation.
+
+Native CI runs full model preparation, then reloads the models with Hugging Face offline mode and converts a generated PPTX to PDF. Installer lifecycle tests disable the dependency task explicitly because full preparation is tested separately. Models, runtime and rendering cache remain in per-user application storage alongside the data-preservation policy.

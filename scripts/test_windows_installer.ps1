@@ -32,7 +32,7 @@ function Invoke-CheckedProcess {
 }
 
 try {
-    Invoke-CheckedProcess $Installer @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+    Invoke-CheckedProcess $Installer @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=""',
         "/DIR=`"$installation`"", "/LOG=`"$(Join-Path $OutputDirectory 'install.log')`"")
     $executable = Join-Path $installation 'SlideVoice.exe'
     if (-not (Test-Path $executable)) { throw 'The installer did not install SlideVoice.exe.' }
@@ -50,7 +50,7 @@ try {
     $dataDirectory = Join-Path $env:LOCALAPPDATA 'SlideVoice/data'
     $marker = Join-Path $dataDirectory 'installer-preservation-check.txt'
     Set-Content $marker 'Preserve user projects when upgrading or uninstalling.'
-    Invoke-CheckedProcess $Installer @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART',
+    Invoke-CheckedProcess $Installer @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=""',
         "/DIR=`"$installation`"", "/LOG=`"$(Join-Path $OutputDirectory 'upgrade.log')`"")
     if (-not (Test-Path $marker)) { throw 'Reinstalling removed user data.' }
     Invoke-CheckedProcess $executable @('--smoke-test')

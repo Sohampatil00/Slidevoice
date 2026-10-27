@@ -34,10 +34,9 @@ def read_settings():
     }
 
 
-@router.put("/api/desktop/settings")
-def save_settings(settings: DesktopSettings):
+def save_settings(settings: DesktopSettings, *, extra_updates=None):
     require_desktop()
-    updates = {"SCRIPT_PROVIDER": "gemini"}
+    updates = {"SCRIPT_PROVIDER": "gemini", **(extra_updates or {})}
     if settings.gemini_key is not None:
         value = settings.gemini_key
         if any(ord(character) < 32 or character in "'\\" for character in value):
@@ -56,3 +55,56 @@ def save_settings(settings: DesktopSettings):
         temporary.replace(core.CONFIG_FILE)
         os.environ.update(updates)
     return read_settings()
+
+
+@router.put("/api/desktop/settings")
+def update_settings(settings: DesktopSettings):
+    return save_settings(settings)
+
+
+@router.get("/api/desktop/setup")
+def setup_status():
+    require_desktop()
+    from .desktop_setup import read_status
+
+    return read_status()
+
+
+@router.post("/api/desktop/setup")
+def start_setup():
+    require_desktop()
+    import subprocess
+    import sys
+
+    from filelock import FileLock, Timeout
+
+    from .desktop_setup import report
+    from .processes import background_options
+
+    # The installer and Settings share a lock and the same persistent status file.
+    with _lock:
+        lock = FileLock(core.DATA / "setup.lock")
+        try:
+            with lock.acquire(timeout=0):
+                process = getattr(start_setup, "process", None)
+                if process is not None and process.poll() is None:
+                    return setup_status()
+                report("running", "Starting dependency setup…")
+                log = core.DATA / "logs" / "desktop.log"
+                log.parent.mkdir(parents=True, exist_ok=True)
+                with log.open("ab") as output:
+                    command = (
+                        [sys.executable, "--install-dependencies"]
+                        if getattr(sys, "frozen", False)
+                        else [sys.executable, str(core.ROOT / "desktop/entry.py"), "--install-dependencies"]
+                    )
+                    start_setup.process = subprocess.Popen(
+                        command,
+                        stdin=subprocess.DEVNULL,
+                        stdout=output,
+                        stderr=subprocess.STDOUT,
+                        **background_options(),
+                    )
+        except Timeout:
+            pass
+    return setup_status()

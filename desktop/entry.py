@@ -17,7 +17,15 @@ def main():
         sys.stdout = log_path.open("a", encoding="utf-8", buffering=1)
     if sys.stderr is None:
         sys.stderr = sys.stdout
-    if "--lux-bootstrap" in sys.argv:
+    if "--verify-offline-setup" in sys.argv:
+        from app.desktop_setup import verify_offline
+
+        verify_offline()
+    elif "--install-dependencies" in sys.argv:
+        from app.desktop_setup import prepare_all
+
+        prepare_all()
+    elif "--lux-bootstrap" in sys.argv:
         from app.lux_bootstrap import main
 
         raise SystemExit(main())

@@ -26,8 +26,15 @@ def ffmpeg():
 
 def soffice():
     configured = os.getenv("SOFFICE_PATH")
+    managed = []
+    if os.getenv("SLIDEVOICE_DESKTOP") == "1":
+        from .platform_paths import desktop_directories
+
+        managed = list((desktop_directories()["cache"] / "libreoffice").glob("*/program/soffice.exe"))
+        managed += list((desktop_directories()["cache"] / "libreoffice").glob("*/*/program/soffice.exe"))
     candidates = [
         configured,
+        *map(str, managed),
         shutil.which("soffice"),
         "/Applications/LibreOffice.app/Contents/MacOS/soffice",
         str(Path.home() / "Applications/LibreOffice.app/Contents/MacOS/soffice"),

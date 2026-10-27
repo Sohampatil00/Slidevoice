@@ -20,7 +20,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-14, windows-2022]
-    timeout-minutes: 45
+    timeout-minutes: 60
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -45,18 +45,26 @@ jobs:
         run: |
           $p = Start-Process dist/SlideVoice/SlideVoice.exe -ArgumentList '--smoke-test' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Packaged backend failed: $($p.ExitCode)" }
-      - name: Verify Windows LuxTTS runtime installation
-        timeout-minutes: 15
+      - name: Verify complete Windows dependency setup
+        timeout-minutes: 30
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $p = Start-Process dist/SlideVoice/SlideVoice.exe -ArgumentList '--prepare-lux-runtime' -PassThru
+          $p = Start-Process dist/SlideVoice/SlideVoice.exe -ArgumentList '--install-dependencies' -PassThru
           while (-not $p.WaitForExit(10000)) {
             Get-Content "$env:LOCALAPPDATA/SlideVoice/data/logs/desktop.log" -Tail 8 -ErrorAction SilentlyContinue
           }
           $p.Refresh()
           Get-Content "$env:LOCALAPPDATA/SlideVoice/data/logs/desktop.log" -Tail 50 -ErrorAction SilentlyContinue
           if ($p.ExitCode -ne 0) { throw "LuxTTS installation failed: $($p.ExitCode)" }
+      - name: Verify cached models and PowerPoint conversion offline
+        timeout-minutes: 10
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process dist/SlideVoice/SlideVoice.exe -ArgumentList '--verify-offline-setup' -Wait -PassThru
+          Get-Content "$env:LOCALAPPDATA/SlideVoice/data/logs/desktop.log" -Tail 40 -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "Offline setup verification failed: $($p.ExitCode)" }
       - name: Test Windows installer and preserved user data
         if: runner.os == 'Windows'
         shell: pwsh
