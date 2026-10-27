@@ -2,6 +2,7 @@ import base64
 import json
 import math
 import shutil
+import subprocess
 import wave
 
 import httpx
@@ -65,7 +66,7 @@ def test_silent_cached_narration_is_regenerated(client, project, monkeypatch, wa
         return 1.0
 
     monkeypatch.setattr(providers, "synthesize", synthesize)
-    body = {"provider": "preview"}
+    body = {"provider": "indic_mio", "voice_id": "test_voice", "consent": True, "use_reference": False}
     client.post(endpoint(project, "audio"), json=body)
     saved = core.read_project(project["id"])
     assert saved["job"]["status"] == "complete"
@@ -439,6 +440,9 @@ def test_indic_payload_and_audio_decoding(monkeypatch, project, wav_bytes):
 def test_local_indian_english_preview(project, monkeypatch):
     if not shutil.which("say"):
         pytest.skip("macOS speech unavailable")
+    installed = subprocess.run(["say", "-v", "?"], capture_output=True, text=True, check=True).stdout
+    if not any(line.startswith("Aman ") for line in installed.splitlines()):
+        pytest.skip("The optional Aman speech voice is not installed on this Mac")
     monkeypatch.setenv("MACOS_PREVIEW_VOICE", "Aman")
     target = core.project_dir(project["id"]) / "preview.wav"
     duration = providers.synthesize("Welcome to your presentation.", target, "preview", "", 1.0)

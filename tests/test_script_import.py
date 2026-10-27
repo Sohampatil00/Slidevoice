@@ -242,7 +242,11 @@ def test_blank_matches_require_editing_before_apply(client, project, monkeypatch
     assert client.post(endpoint(project, "apply"), json=response.json()).status_code == 422
 
 
-@pytest.mark.parametrize("script", ["x" * 120001, labelled(["x" * 12001, "B", "C"])])
+@pytest.mark.parametrize(
+    "script",
+    ["x" * 120001, labelled(["x" * 12001, "B", "C"])],
+    ids=["oversized-full-script", "oversized-slide-script"],
+)
 def test_import_size_limits(client, project, script):
     assert client.post(endpoint(project, "preview"), json={"script": script}).status_code in {400, 422}
 
