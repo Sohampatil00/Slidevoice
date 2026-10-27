@@ -19,15 +19,18 @@ The configuration file is plaintext; macOS uses owner-only file permissions and 
 No key is required to paste scripts or use local narration.
 
 Select LuxTTS, upload a permitted voice sample, and generate narration.
-The first generation installs managed Python and pinned model dependencies, then downloads model weights.
-Allow several minutes and several GB of disk space. Later launches reuse the cache.
+On Windows, the installer prepares managed Python, pinned model dependencies, model weights,
+and a private LibreOffice renderer in one guided setup. If setup was skipped or interrupted,
+open **Connections & setup** and choose **Prepare / repair components**; completed downloads
+are reused. Allow several minutes and several GB of disk space. Later launches reuse the cache.
 CPU narration on Windows can be slower than Mac MPS or a dedicated GPU; the initial Windows runtime uses CPU PyTorch.
 The app automatically starts its model worker and stops owned processes on normal exit.
 Independent model servers are reused and left running. Closing during a job stops processing;
 completed slides remain saved and interrupted jobs can be retried after reopening.
 
-FFmpeg is bundled. Install LibreOffice separately for PPTX rendering, or import PDF/images.
-The app detects LibreOffice in standard Mac and Windows installation locations.
+FFmpeg is bundled. Windows setup includes a private LibreOffice renderer for PPTX rendering;
+macOS users can install LibreOffice separately, or import PDF/images.
+The app detects managed and standard LibreOffice installation locations.
 The desktop interface uses LuxTTS for voice cloning and offers a Mac preview voice. Legacy provider adapters remain available to source integrations.
 
 ## Persistent storage
