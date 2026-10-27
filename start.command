@@ -16,5 +16,6 @@ if [ ! -f .env ]; then
   cp .env.example .env
 fi
 echo "SlideVoice is starting at http://127.0.0.1:8765"
-echo "Open that address in your browser. Press Ctrl+C to stop."
+echo "Open that address in your browser. LuxTTS starts automatically when you generate narration."
+echo "Press Ctrl+C to stop the studio and any LuxTTS model it started."
 exec .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port "${PORT:-8765}"

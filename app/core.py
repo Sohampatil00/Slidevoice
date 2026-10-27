@@ -9,7 +9,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")
+CONFIG_FILE = Path(os.getenv("SLIDEVOICE_CONFIG_FILE", str(ROOT / ".env")))
+load_dotenv(CONFIG_FILE)
 DATA = Path(os.getenv("SLIDEVOICE_DATA_DIR", str(ROOT / "data"))).resolve()
 DATA.mkdir(parents=True, exist_ok=True)
 MAX_SLIDES = 100

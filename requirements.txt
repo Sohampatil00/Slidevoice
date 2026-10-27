@@ -7,3 +7,4 @@ Pillow>=11,<13
 python-pptx>=1.0,<2
 imageio-ffmpeg>=0.6,<1
 python-dotenv>=1.0,<2
+psutil>=7,<8

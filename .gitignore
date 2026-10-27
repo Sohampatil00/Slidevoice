@@ -8,6 +8,11 @@
 # Local environments and generated user data
 .venv/
 .indic-venv/
+.chatterbox-venv/
+.qwen-venv/
+.lux-venv/
+.desktop-venv/
+.desktop-build/
 data/
 
 # Python caches and build products

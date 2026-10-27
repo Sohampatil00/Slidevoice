@@ -31,5 +31,7 @@ jobs:
         run: python -m ruff check app tests
       - name: Check JavaScript syntax
         run: node --check app/static/app.js
+      - name: Test presentation playback
+        run: node --test tests/presentation.test.cjs
       - name: Run tests without AI providers
         run: python -m pytest -q

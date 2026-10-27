@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 — Desktop development build
+
+- Shared SlideVoice branding for macOS app bundles, Windows EXE/setup, shortcuts, and favicon.
+- Gemini-only desktop key settings and LuxTTS narration controls.
+- Presentation mode with native fullscreen, keyboard navigation, and narration-driven slide advance.
+- Persistent desktop storage, automatic LuxTTS runtime setup, and owned-worker cleanup on native Quit.
+- Native Mac development build verified locally; Windows installer and portable ZIP pipeline prepared for native CI.
+
 ## 0.1.0 — Initial GitHub publication
 
 - Local browser studio for PDF, PPTX, and image presentations.

@@ -18,6 +18,67 @@ def endpoint(project, action):
     return f"/api/projects/{project['id']}/{action}"
 
 
+@pytest.mark.parametrize("signal", ["silence", "quiet", "dc", "click"])
+def test_inaudible_audio_is_rejected_without_replacing_recording(tmp_path, wav_bytes, signal):
+    source = tmp_path / "source.wav"
+    target = tmp_path / "existing.wav"
+    target.write_bytes(wav_bytes)
+    samples = {
+        "silence": b"\x00\x00" * 48000,
+        "quiet": b"\x01\x00\xff\xff" * 24000,
+        "dc": b"\x00\x10" * 48000,
+        "click": b"\xff\x7f" + b"\x00\x00" * 47999,
+    }[signal]
+    with wave.open(str(source), "wb") as recording:
+        recording.setnchannels(1)
+        recording.setsampwidth(2)
+        recording.setframerate(48000)
+        recording.writeframes(samples)
+    with pytest.raises(media.SilentAudioError, match="silent or too quiet"):
+        media.normalize_audio(source, target)
+    assert target.read_bytes() == wav_bytes
+    assert not list(tmp_path.glob("*-normalizing.wav"))
+
+
+def test_export_blocks_preexisting_silent_recordings(client, project, wav_bytes, silent_wav_bytes):
+    for slide in project["slides"]:
+        response = client.post(
+            endpoint(project, f"slides/{slide['id']}/audio"), files={"file": ("voice.wav", wav_bytes)}
+        )
+        assert response.status_code == 200
+    saved = core.read_project(project["id"])
+    (core.project_dir(project["id"]) / saved["slides"][1]["audio"]).write_bytes(silent_wav_bytes)
+    client.post(endpoint(project, "render"), json={"resolution": "720p"})
+    saved = core.read_project(project["id"])
+    assert saved["job"]["status"] == "failed"
+    assert "Slide 2" in saved["job"]["message"]
+    assert "silent or too quiet" in saved["job"]["message"]
+    assert not saved["export"]
+
+
+def test_silent_cached_narration_is_regenerated(client, project, monkeypatch, wav_bytes, silent_wav_bytes):
+    generated = []
+
+    def synthesize(script, destination, *args, **kwargs):
+        generated.append(script)
+        destination.write_bytes(wav_bytes)
+        return 1.0
+
+    monkeypatch.setattr(providers, "synthesize", synthesize)
+    body = {"provider": "preview"}
+    client.post(endpoint(project, "audio"), json=body)
+    saved = core.read_project(project["id"])
+    assert saved["job"]["status"] == "complete"
+    damaged = saved["slides"][1]
+    (core.project_dir(project["id"]) / damaged["audio"]).write_bytes(silent_wav_bytes)
+    generated.clear()
+    client.post(endpoint(project, "audio"), json=body)
+    saved = core.read_project(project["id"])
+    assert saved["job"]["status"] == "complete"
+    assert generated == [damaged["script"]]
+    assert saved["slides"][1]["audio"] != damaged["audio"]
+
+
 def test_demo_and_private_files(client, project):
     assert len(project["slides"]) == 3
     assert all(slide["script"] for slide in project["slides"])
@@ -217,7 +278,10 @@ def test_partial_provider_failure_keeps_completed_slides(client, project, monkey
         return 1.0
 
     monkeypatch.setattr(providers, "synthesize", fake_speech)
-    client.post(endpoint(project, "audio"), json={"voice_id": "own", "consent": True, "use_reference": False})
+    client.post(
+        endpoint(project, "audio"),
+        json={"provider": "indic_mio", "voice_id": "own", "consent": True, "use_reference": False},
+    )
     result = client.get(f"/api/projects/{project['id']}").json()
     assert result["job"]["status"] == "failed"
     assert "Slide 2:" in result["job"]["message"]

@@ -2,9 +2,11 @@ import math
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import wave
 import zipfile
+from array import array
 from pathlib import Path
 
 import imageio_ffmpeg
@@ -13,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageOps
 from pptx import Presentation
 
 from .core import MAX_SLIDES, WorkflowError
+from .processes import background_options
 
 FPS = 30
 
@@ -27,13 +30,23 @@ def soffice():
         configured,
         shutil.which("soffice"),
         "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        str(Path.home() / "Applications/LibreOffice.app/Contents/MacOS/soffice"),
+        *[
+            str(Path(os.getenv(key, default)) / "LibreOffice/program/soffice.exe")
+            for key, default in (
+                ("ProgramFiles", "C:/Program Files"),
+                ("ProgramFiles(x86)", "C:/Program Files (x86)"),
+            )
+        ],
     ]
     return next((path for path in candidates if path and Path(path).is_file()), None)
 
 
 def run_command(arguments, timeout=300):
     try:
-        completed = subprocess.run(arguments, capture_output=True, timeout=timeout, check=False)
+        completed = subprocess.run(
+            arguments, capture_output=True, timeout=timeout, check=False, **background_options()
+        )
     except subprocess.TimeoutExpired as error:
         raise WorkflowError("Processing timed out. Try a smaller presentation.") from error
     except OSError as error:
@@ -145,6 +158,46 @@ def import_image(source, folder, position, title):
     return slide_record(position, filename, title=title)
 
 
+class SilentAudioError(WorkflowError):
+    pass
+
+
+def validate_narration_audio(path):
+    """Require some audible signal in our normalized mono PCM recordings.
+
+    Count 20 ms windows above -60 dBFS, ignoring DC offsets. Requiring
+    100 ms of signal rejects silence and isolated clicks while allowing pauses.
+    This checks audibility, not whether the model spoke the correct words.
+    """
+    try:
+        with wave.open(str(path), "rb") as recording:
+            if (recording.getnchannels(), recording.getsampwidth(), recording.getframerate()) != (
+                1,
+                2,
+                48000,
+            ):
+                raise WorkflowError("Narration audio is invalid. Generate or upload it again.")
+            duration = recording.getnframes() / recording.getframerate()
+            if not 0.1 <= duration <= 1800:
+                raise WorkflowError("Audio must be between 0.1 seconds and 30 minutes per slide.")
+            audible_samples = 0
+            while frames := recording.readframes(960):
+                samples = array("h", frames)
+                if sys.byteorder != "little":
+                    samples.byteswap()
+                mean = sum(samples) / len(samples)
+                variance = sum(sample * sample for sample in samples) / len(samples) - mean * mean
+                if variance >= (32768 * 0.001) ** 2:
+                    audible_samples += len(samples)
+                if audible_samples >= 4800:
+                    return duration
+    except (OSError, EOFError, wave.Error, ValueError) as error:
+        raise WorkflowError("Narration audio is missing or invalid. Generate or upload it again.") from error
+    raise SilentAudioError(
+        "Narration audio is silent or too quiet. Regenerate this slide or upload an audible recording."
+    )
+
+
 def normalize_audio(source, destination, speed=1.0):
     temporary = destination.with_name(destination.stem + "-normalizing.wav")
     try:
@@ -168,10 +221,7 @@ def normalize_audio(source, destination, speed=1.0):
                 str(temporary),
             ]
         )
-        with wave.open(str(temporary), "rb") as recording:
-            duration = recording.getnframes() / recording.getframerate()
-        if not 0.1 <= duration <= 1800:
-            raise WorkflowError("Audio must be between 0.1 seconds and 30 minutes per slide.")
+        duration = validate_narration_audio(temporary)
         temporary.replace(destination)
         return duration
     finally:
@@ -207,6 +257,11 @@ def render_video(folder, slides, pause, resolution, progress):
     dimensions = {"1080p": (1920, 1080), "720p": (1280, 720)}
     width, height = dimensions[resolution]
     timeline = timeline_for(slides, pause)
+    for slide in slides:
+        try:
+            validate_narration_audio(folder / slide["audio"])
+        except WorkflowError as error:
+            raise WorkflowError(f"Slide {slide['number']}: {error}") from error
     with tempfile.TemporaryDirectory(prefix="render-", dir=folder) as scratch:
         scratch = Path(scratch)
         for index, (slide, timing) in enumerate(zip(slides, timeline, strict=True)):

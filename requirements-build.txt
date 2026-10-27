@@ -1,0 +1,4 @@
+-r requirements-desktop.txt
+pyinstaller>=6.16,<7
+uv>=0.9,<1
+pip>=25,<27

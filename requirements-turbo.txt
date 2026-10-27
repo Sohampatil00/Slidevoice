@@ -1,0 +1,6 @@
+# Isolated optional runtime. Do not install these packages in the studio environment.
+fastapi>=0.115,<1
+uvicorn>=0.34,<1
+python-dotenv>=1,<2
+soundfile>=0.13,<1
+chatterbox-tts==0.1.7

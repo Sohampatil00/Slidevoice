@@ -4,20 +4,28 @@
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Status: local MVP](https://img.shields.io/badge/status-local%20MVP-orange)
 
-A local-first studio that turns presentations into narrated videos. English scripts, your own voice through **Indic-MIO**, and automatic slide timing. No timeline editor or speech API subscription required.
+A local-first studio that turns presentations into narrated videos. English scripts, your own voice through **LuxTTS** (with optional Indic-MIO), and automatic slide timing. No timeline editor or speech API subscription required.
 
-**Start here:** [Step-by-step run instructions](README_RUN.md) explain how to start both Terminal services, generate your first video, and troubleshoot the “Indic-MIO is not reachable” error.
+**Start here:** [Step-by-step run instructions](README_RUN.md) explain the single-launcher setup, generate your first video, and troubleshoot the “Indic-MIO is not reachable” error.
 
 ## What you can do
 
 - Import PDF, PowerPoint, or slide images into a browser-based studio.
-- Write narration per slide, import a complete script, or draft scripts with optional Claude integration.
-- Clone an authorised voice locally with Indic-MIO, upload existing recordings, or try macOS preview speech.
+- Write narration per slide, import a complete script, or draft scripts with optional Gemini or Claude integration.
+- Clone an authorised voice locally with LuxTTS, Indic-MIO or Chatterbox Turbo, upload existing recordings, or try macOS preview speech.
 - Audition individual slides, adjust speaking pace, and reuse cached narration.
 - Export 1080p or 720p MP4 videos with slide durations measured from the actual audio.
 - Download slide timestamps and scripts as `timings.json`.
 
-**Project status:** version 0.1.0, a single-user local MVP. macOS has convenience launchers and native preview speech. Other platforms can use the manual Python setup with uploaded audio or Indic-MIO; platform and GPU compatibility depend on the installed media/model tools. There is no hosted service, account system, or collaboration feature.
+**Project status:** version 0.1.1, a single-user local MVP. macOS has convenience launchers and native preview speech. Other platforms can use the manual Python setup with uploaded audio or Indic-MIO; platform and GPU compatibility depend on the installed media/model tools. There is no hosted service, account system, or collaboration feature.
+
+## Desktop apps (development)
+
+macOS Apple Silicon application/DMG and Windows x64 installer/portable build tooling are available.
+The app opens in a native window and starts LuxTTS automatically; users do not run terminal commands.
+First-use runtime/model downloads require internet. See [desktop installation, builds and release status](docs/DESKTOP.md)
+and the [implementation plan](docs/DESKTOP_IMPLEMENTATION_PLAN.md).
+Windows execution and public signing remain release gates; this is not a signed public release.
 
 ## Quick start
 
@@ -29,7 +37,7 @@ cd Slidevoice
 ./start.command
 ```
 
-Open **[http://127.0.0.1:8765](http://127.0.0.1:8765)**. Click **Try a 3-slide example**, select **Free Mac preview**, generate narration, then create a video. The preview requires an installed macOS voice; it uses a system voice. For your own voice, start `./indic-mio.command` in a second Terminal and follow the voice setup below.
+Open **[http://127.0.0.1:8765](http://127.0.0.1:8765)**. Click **Try a 3-slide example**, select **Free Mac preview**, generate narration, then create a video. The preview requires an installed macOS voice; it uses a system voice. For your own voice, select **LuxTTS**, upload a reference recording, and click **Generate narration**. The studio starts LuxTTS automatically; no second terminal is needed. First use installs the optional runtime and downloads model weights.
 
 | Requirement | When you need it |
 | --- | --- |
@@ -37,7 +45,7 @@ Open **[http://127.0.0.1:8765](http://127.0.0.1:8765)**. Click **Try a 3-slide e
 | Internet access | Initial dependency/model downloads and optional Claude API requests |
 | LibreOffice | PPTX rendering; PDF and image imports do not need it |
 | Several GB of free storage | Optional local speech packages and model weights; projects need additional space |
-| Anthropic API key | Optional script drafting and unlabelled script matching |
+| Gemini or Anthropic API key | Optional script drafting; unlabelled script matching uses Anthropic |
 | Clean 3–20 second voice recording | Local voice cloning; use a voice you own or are authorised to use |
 
 No Node.js build step is required to run the studio. FFmpeg is available through `imageio-ffmpeg`. Local speech generation needs no paid speech API subscription. Claude requests may incur API charges.
@@ -51,7 +59,7 @@ No Node.js build step is required to run the studio. FFmpeg is available through
 - [Security and vulnerability reporting](SECURITY.md)
 - [Changelog](CHANGELOG.md)
 
-Continue below for [voice cloning](#your-own-indian-english-voice), [Claude scripts](#claude-scripts), [script import](#import-one-full-narration-script), [presentation formats](#presentation-import), [export](#audio-timing-and-export), and [privacy](#privacy-and-operation).
+Continue below for [voice cloning](#your-own-indian-english-voice), [AI scripts](#ai-scripts), [script import](#import-one-full-narration-script), [presentation formats](#presentation-import), [export](#audio-timing-and-export), and [privacy](#privacy-and-operation).
 
 ## Run on your Mac
 
@@ -94,11 +102,19 @@ You can alternatively choose a voice preset already installed on your upstream s
 
 The voice recording determines the accent. Selecting English doesn't itself guarantee an Indian accent or perfect similarity. Check technical terms, names, and numbers. Only synthesize voices you own or are authorised to use.
 
-## Claude scripts
+### Optional Chatterbox Turbo
 
-Set `ANTHROPIC_API_KEY` in `.env` and restart. Click **Draft missing scripts** to fill blank scripts without overwriting your existing ones, or **Write with Claude** for the selected slide. Claude receives slide images, extracted text, speaker notes, and deck titles. Each completed script is saved immediately if a later request fails. You can always paste scripts from Claude manually instead.
+Run `./chatterbox-turbo.command`, wait for loading to finish, then choose **Chatterbox Turbo** in Narration source. Use a clean 6–20 second English voice sample in your accent. This optional service uses port 8002 and its own `.chatterbox-venv`; Indic-MIO remains available. Run one speech model at a time on a 16 GB Mac. See [configuration](docs/CONFIGURATION.md#optional-chatterbox-turbo) for device, port, and authentication settings.
 
-`ANTHROPIC_MODEL` defaults to `claude-sonnet-5-5`. Claude usage may incur API charges; local Indic-MIO does not require a speech subscription. The UI confirms before sending content for generation. Opening the app only checks the configured model server's health; it does not send slides, scripts, or reference audio. No model is automatically downloaded just by opening the studio.
+### Optional LuxTTS
+
+Select **LuxTTS** under Narration source and generate narration. The studio starts its isolated runtime automatically on port 8004, with a 3–20 second English reference recording, local Whisper transcription, and cached voice conditioning. First use installs dependencies and downloads model weights. Stopping the studio stops any LuxTTS process it started. A separately started server is reused and stays running. Set `LUX_TTS_AUTOSTART=0` for manual operation with `./lux-tts.command`. See [configuration](docs/CONFIGURATION.md#optional-luxtts).
+
+## AI scripts
+
+Set `GEMINI_API_KEY` in `.env` and restart to use Gemini, or set `ANTHROPIC_API_KEY` for Claude. `SCRIPT_PROVIDER=auto` prefers Gemini when its key is present; use `gemini` or `claude` to select explicitly. Click **Generate scripts for all slides** above the editor to draft the whole presentation, or **Write with Gemini/Claude** for the selected slide. Whole-presentation generation confirms before replacing existing scripts and clearing their audio. The selected provider receives slide images, extracted text, speaker notes, and deck titles. Scripts use short sentences and spoken forms of numbers and symbols for narration. Each completed script is saved immediately if a later request fails. You can always paste scripts from Claude manually instead.
+
+`GEMINI_MODEL` defaults to `gemini-3.5-flash-lite`. Gemini sends slide content to Google. `ANTHROPIC_MODEL` defaults to `claude-sonnet-5-5`. Script generation may incur API charges; local Indic-MIO does not require a speech subscription. The UI confirms before sending content for generation. Opening the app only checks the configured model server's health; it does not send slides, scripts, or reference audio. No model is automatically downloaded just by opening the studio.
 
 ## Import one full narration script
 
@@ -124,7 +140,7 @@ Every slide has its own script and audio clip. The app measures actual decoded a
 - Upload an existing recording for any slide if you don't want speech generation. The file is decoded locally and normalised to 48 kHz mono WAV.
 - Repeating narration generation reuses identical script/voice/speed/model combinations. Uploaded recordings are preserved by the bulk generation action.
 - Long scripts are split at sentence/word boundaries into at most 280-character requests to respect upstream's default 300-character limit. Every chunk uses the same voice reference. Normalised chunks are joined with 120 ms breathing gaps, then the selected speaking pace is applied with FFmpeg's pitch-preserving tempo filter. Timings are measured after these operations. Reference content changes invalidate the speech cache.
-- Recoverable Indic-MIO generation errors (token limits, invalid speech tokens, or empty model audio) trigger bounded retries with smaller chunks. The original wording and order are retained. Invalid references and other request validation errors are reported without retrying; failures identify the slide and keep completed slides saved.
+- Recoverable Indic-MIO generation errors (token limits, invalid speech tokens, or empty or silent model audio) trigger bounded retries with smaller chunks. The original wording and order are retained. Invalid references and other request validation errors are reported without retrying; failures identify the slide and keep completed slides saved.
 - Editing a script clears its audio and marks the previous video obsolete. After changing a script, regenerate or re-upload that slide's audio and render again.
 - To change an uploaded recording into generated narration, use **Generate this slide's audio**.
 - Changing voice, speed, or speech model takes effect when you click **Generate narration**, not retroactively. Listen to the regenerated audio before rendering.
@@ -132,7 +148,7 @@ Every slide has its own script and audio clip. The app measures actual decoded a
 
 ## Privacy and operation
 
-The app and bundled model server bind to loopback only. Files, voice samples, and downloaded model weights live in `data/`; keys live only in `.env` or server environment variables. These and both virtual environments are git-ignored. Local Indic-MIO keeps scripts and reference audio on your machine. A separately configured remote model server receives scripts and your selected voice sample, and Claude receives slide content for script generation. Provider policies govern remotely processed content. Voice samples are personal data: only upload recordings you own or are authorised to clone. Sample files are excluded from source control but are **not encrypted at rest**. Deleting a project folder removes its saved sample; the model process may retain up to four speaker embeddings in memory until shutdown.
+The app and bundled model server bind to loopback only. Files, voice samples, and downloaded model weights live in `data/`; keys live only in `.env` or server environment variables. These and both virtual environments are git-ignored. Local Indic-MIO keeps scripts and reference audio on your machine. A separately configured remote model server receives scripts and your selected voice sample, and the selected script provider receives slide content (Google for Gemini, Anthropic for Claude). Provider policies govern remotely processed content. Voice samples are personal data: only upload recordings you own or are authorised to clone. Sample files are excluded from source control but are **not encrypted at rest**. Deleting a project folder removes its saved sample; the model process may retain up to four speaker embeddings in memory until shutdown.
 
 This is a **single-user local MVP**, not a multi-user hosted service. Do not expose it with a public tunnel or bind to `0.0.0.0`. Run one Uvicorn worker: job locks are in-process. There is no login, durable queue, cancellation, or collaboration yet. To remove a project and its source/audio/video, stop the server and delete that project's folder under `data/`. Source uploads and unused older audio can consume disk space; review and clean up projects periodically.
 
@@ -170,4 +186,4 @@ For setup problems, start with the [run guide](README_RUN.md). Report reproducib
 
 No licence for SlideVoice's own source code has been selected yet. Public availability alone does not grant a general licence to use, modify, or redistribute it; contact the repository owner for permission beyond the rights provided by GitHub's terms. Third-party dependencies, model weights, codecs, and voice presets remain subject to their own licences. In particular, review PyMuPDF's AGPL/commercial terms before distributing an application that uses it. The model and codec licences described above do not apply to all of SlideVoice's dependencies.
 
-Built with FastAPI, PyMuPDF, python-pptx, Pillow, FFmpeg, Indic-MIO, MioCodec, and optional Claude integration. See the requirements files for direct dependencies and the provider references above for upstream projects.
+Built with FastAPI, PyMuPDF, python-pptx, Pillow, FFmpeg, Indic-MIO, MioCodec, and optional Gemini or Claude integration. See the requirements files for direct dependencies and the provider references above for upstream projects.

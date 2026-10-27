@@ -287,6 +287,40 @@ def test_single_word_can_retry_without_splitting_word(project, monkeypatch, wav_
     assert target.is_file()
 
 
+@pytest.mark.parametrize("recover", [True, False])
+def test_silent_success_responses_retry_without_overwriting_good_audio(
+    project, monkeypatch, wav_bytes, silent_wav_bytes, recover
+):
+    requested = []
+    succeeded = []
+    real_client = httpx.Client
+
+    def respond(request):
+        text = json.loads(request.content)["text"]
+        requested.append(text)
+        audio = wav_bytes if recover and len(requested) > 1 else silent_wav_bytes
+        if audio == wav_bytes:
+            succeeded.append(text)
+        return httpx.Response(200, json={"audio": base64.b64encode(audio).decode(), "token_count": 25})
+
+    monkeypatch.setattr(
+        providers.httpx, "Client", lambda **kwargs: real_client(transport=httpx.MockTransport(respond))
+    )
+    target = core.project_dir(project["id"]) / "existing.wav"
+    target.write_bytes(wav_bytes)
+    text = "Keep every word in this explanation. Silent output must be retried."
+    if recover:
+        providers.synthesize(text, target, "indic_mio", "own", 1)
+        assert " ".join(succeeded) == text
+        assert len(requested) >= 3
+    else:
+        with pytest.raises(WorkflowError, match="Automatic retries also failed"):
+            providers.synthesize(text, target, "indic_mio", "own", 1)
+        assert len(requested) == 3
+        assert target.read_bytes() == wav_bytes
+    assert not list(target.parent.glob("indic-speech-*"))
+
+
 @pytest.mark.parametrize(
     "detail",
     [

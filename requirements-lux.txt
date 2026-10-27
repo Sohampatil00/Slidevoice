@@ -1,0 +1,11 @@
+# Separate optional runtime; never install these packages in the studio environment.
+--find-links https://k2-fsa.github.io/icefall/piper_phonemize.html
+fastapi>=0.115,<1
+uvicorn>=0.34,<1
+python-dotenv>=1,<2
+soundfile>=0.13,<1
+torch==2.6.0
+torchaudio==2.6.0
+numpy>=1.26,<2
+linacodec @ git+https://github.com/ysharma3501/LinaCodec.git@c0ae7c7285e121475c27592cfbb600624b714290
+zipvoice @ git+https://github.com/ysharma3501/LuxTTS.git@28ae6a61151684fffc9d1a7aa15eafa02286fe0b

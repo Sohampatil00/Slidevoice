@@ -1,3 +1,4 @@
+import atexit
 import json
 import logging
 import os
@@ -15,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from . import core, media, providers, script_import
+from . import core, desktop_settings, local_runtime, media, providers, script_import
 from .core import WorkflowError
 
 logger = logging.getLogger("slidevoice")
@@ -36,10 +37,17 @@ async def lifespan(application):
                 core.save_project(project)
         except (OSError, ValueError, KeyError):
             continue
-    yield
+    application.state.lux_runtime = local_runtime.LuxRuntime()
+    atexit.register(application.state.lux_runtime.stop)
+    try:
+        yield
+    finally:
+        await run_in_threadpool(application.state.lux_runtime.stop)
+        atexit.unregister(application.state.lux_runtime.stop)
 
 
 app = FastAPI(title="SlideVoice", lifespan=lifespan)
+app.include_router(desktop_settings.router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
@@ -56,8 +64,11 @@ async def local_only(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
+    # pywebview generates its small native API wrapper with Function(). Keep
+    # this desktop-only; inline/remote scripts remain disallowed in both modes.
+    script_policy = "script-src 'self'" + (" 'unsafe-eval'" if os.getenv("SLIDEVOICE_DESKTOP") == "1" else "")
     response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        f"default-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self'; {script_policy}; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     )
     response.headers["Cache-Control"] = "no-store"
     return response
@@ -80,11 +91,26 @@ def index():
     return FileResponse(STATIC / "index.html")
 
 
+@app.get("/api/desktop/identity")
+def desktop_identity():
+    if os.getenv("SLIDEVOICE_DESKTOP") != "1":
+        raise HTTPException(status_code=404)
+    return {"instance": os.getenv("SLIDEVOICE_INSTANCE_ID", "")}
+
+
 @app.get("/api/health")
 def health():
+    script_provider = providers.script_provider()
     return {
         "claude": bool(os.getenv("ANTHROPIC_API_KEY")),
+        "gemini": bool(os.getenv("GEMINI_API_KEY")),
+        "script_provider": script_provider,
+        "script_provider_name": "Gemini" if script_provider == "gemini" else "Claude",
+        "scripts": bool(os.getenv("GEMINI_API_KEY" if script_provider == "gemini" else "ANTHROPIC_API_KEY")),
         "indic_mio": providers.indic_status(),
+        "chatterbox_turbo": providers.speech_status("chatterbox_turbo"),
+        "lux_tts": providers.speech_status("lux_tts"),
+        "lux_tts_autostart": local_runtime.lux_can_autostart(),
         "preview": bool(shutil.which("say")),
         "pptx": bool(media.soffice()),
         "default_voice_id": os.getenv("INDIC_MIO_PRESET_ID", ""),
@@ -265,8 +291,8 @@ class ScriptRequest(BaseModel):
 
 @app.post("/api/projects/{project_id}/scripts")
 def scripts(project_id: str, body: ScriptRequest, tasks: BackgroundTasks):
-    if not os.getenv("ANTHROPIC_API_KEY"):
-        raise WorkflowError("Add ANTHROPIC_API_KEY to .env and restart, or paste your own narration.")
+    providers.script_api_key()
+    provider_name = "Gemini" if providers.script_provider() == "gemini" else "Claude"
 
     def operation(project, progress):
         selected = (
@@ -276,7 +302,7 @@ def scripts(project_id: str, body: ScriptRequest, tasks: BackgroundTasks):
         )
         titles = [slide["title"] for slide in project["slides"]]
         for index, slide in enumerate(selected):
-            progress(index / len(selected), f"Claude is explaining slide {slide['number']}…")
+            progress(index / len(selected), f"{provider_name} is explaining slide {slide['number']}…")
             script = providers.generate_script(slide, core.project_dir(project_id), titles, body.instructions)
             slide.update(script=script, audio=None, duration=None, audio_signature=None, audio_source=None)
             core.invalidate_export(project)
@@ -313,10 +339,7 @@ def preview_full_script(project_id: str, body: FullScriptRequest):
             )
             method = "claude"
         else:
-            raise WorkflowError(
-                "Add standalone Slide 1, Slide 2 headings before each section, "
-                "or choose Match slide content with Claude for an unlabelled script."
-            )
+            raise WorkflowError("Add standalone Slide 1, Slide 2 headings before each narration section.")
     script_import.validate_sections(sections, len(project["slides"]))
     return {
         "revision": project["updated_at"],
@@ -371,7 +394,7 @@ def apply_full_script(project_id: str, body: ApplyFullScriptRequest):
 
 
 class AudioRequest(BaseModel):
-    provider: str = Field(default="indic_mio", pattern="^(indic_mio|preview)$")
+    provider: str = Field(default="indic_mio", pattern="^(indic_mio|chatterbox_turbo|lux_tts|preview)$")
     voice_id: str = Field(default="", max_length=120, pattern=r"^[a-zA-Z0-9_-]*$")
     speed: float = Field(default=1, ge=0.7, le=1.2, allow_inf_nan=False)
     consent: bool = False
@@ -381,8 +404,8 @@ class AudioRequest(BaseModel):
 
 @app.post("/api/projects/{project_id}/audio")
 def audio(project_id: str, body: AudioRequest, tasks: BackgroundTasks):
-    voice_id = body.voice_id or os.getenv("INDIC_MIO_PRESET_ID", "")
-    if body.provider == "indic_mio":
+    voice_id = (body.voice_id or os.getenv("INDIC_MIO_PRESET_ID", "")) if body.provider == "indic_mio" else ""
+    if body.provider in {"indic_mio", "chatterbox_turbo", "lux_tts"}:
         if not body.consent:
             raise WorkflowError("Confirm you own this voice or have permission to use it.")
     elif not shutil.which("say"):
@@ -398,9 +421,19 @@ def audio(project_id: str, body: AudioRequest, tasks: BackgroundTasks):
             raise WorkflowError("Import slides first.")
         folder = core.project_dir(project_id)
         reference = (
-            project.get("voice_reference") if body.provider == "indic_mio" and body.use_reference else None
+            project.get("voice_reference")
+            if body.provider in {"indic_mio", "chatterbox_turbo", "lux_tts"} and body.use_reference
+            else None
         )
         reference_audio = folder / reference["file"] if reference else None
+        if body.provider == "lux_tts" and not reference_audio:
+            raise WorkflowError("LuxTTS requires a clean 3–20 second voice sample.")
+        if body.provider == "chatterbox_turbo" and (
+            not reference_audio or not 5 < reference.get("duration", 0) <= 20
+        ):
+            raise WorkflowError(
+                "Chatterbox Turbo requires a clean 6–20 second voice sample. Upload a longer sample if needed."
+            )
         if body.provider == "indic_mio" and body.use_reference and not reference_audio:
             raise WorkflowError(
                 "Upload a 3–20 second voice sample first, or switch Voice reference to a server preset."
@@ -414,10 +447,13 @@ def audio(project_id: str, body: AudioRequest, tasks: BackgroundTasks):
                 continue
             if not slide["script"].strip():
                 raise WorkflowError(f"Write or generate the script for slide {slide['number']} first.")
+        lux_ready = False
         for index, slide in enumerate(selected):
             progress(index / len(selected), f"Creating narration for slide {slide['number']}…")
             effective_voice = (
-                voice_id if body.provider == "indic_mio" else os.getenv("MACOS_PREVIEW_VOICE", "Aman")
+                voice_id
+                if body.provider in {"indic_mio", "chatterbox_turbo", "lux_tts"}
+                else os.getenv("MACOS_PREVIEW_VOICE", "Aman")
             )
             signature = providers.audio_signature(
                 slide["script"], body.provider, effective_voice, body.speed, reference_audio=reference_audio
@@ -429,9 +465,22 @@ def audio(project_id: str, body: AudioRequest, tasks: BackgroundTasks):
                 and slide.get("audio")
                 and (folder / slide["audio"]).is_file()
             ):
-                continue
+                try:
+                    media.validate_narration_audio(folder / slide["audio"])
+                except WorkflowError:
+                    pass  # Regenerate old recordings that fail the current checks.
+                else:
+                    continue
             filename = f"{slide['id']}-{uuid.uuid4().hex[:12]}.wav"
             try:
+                if body.provider == "lux_tts" and not lux_ready:
+                    application_runtime = app.state.lux_runtime
+                    fraction = index / len(selected)
+                    application_runtime.ensure_ready(
+                        lambda message, fraction=fraction: progress(fraction, message)
+                    )
+                    lux_ready = True
+                    progress(index / len(selected), f"Creating narration for slide {slide['number']}…")
                 duration = providers.synthesize(
                     slide["script"],
                     folder / filename,

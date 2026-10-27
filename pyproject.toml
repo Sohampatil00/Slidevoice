@@ -1,6 +1,6 @@
 [project]
 name = "slidevoice"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local presentation-to-narrated-video studio"
 requires-python = ">=3.12"
 

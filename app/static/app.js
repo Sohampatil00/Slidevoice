@@ -43,14 +43,15 @@ function updateButtons() {
   for (const id of ["ai-one", "ai-all", "audio-one", "generate-audio", "save-script", "render-video", "import-script"]) {
     element(id).disabled = running || noSlides;
   }
-  element("ai-one").disabled ||= !state.health.claude;
-  element("ai-all").disabled ||= !state.health.claude;
+  element("ai-one").disabled ||= !state.health.scripts;
+  element("ai-all").disabled ||= !state.health.scripts;
   element("render-video").disabled ||= !state.project?.slides.every((slide) => slide.audio_ready);
   element("script").disabled = running;
   element("slide-title").disabled = running;
   element("audio-upload").disabled = running;
   element("reference-upload").disabled = running;
   for (const id of ["new-project", "sidebar-new", "try-demo", "empty-upload"]) element(id).disabled = state.pending;
+  element("present-slides").disabled = running || noSlides;
   updateImportButtons();
 }
 
@@ -100,6 +101,7 @@ function render() {
   element("empty-state").hidden = slides.length > 0 || project?.job.status === "running";
   element("editor").hidden = !slides.length;
   element("full-script-bar").hidden = !slides.length;
+  element("script-generation-bar").hidden = !slides.length;
   element("controls").hidden = !slides.length;
   element("step-import").classList.toggle("done", slides.length > 0);
   element("step-script").classList.toggle("done", slides.length > 0 && slides.every((slide) => slide.script));
@@ -142,12 +144,12 @@ function renderSelectedSlide() {
   element("slide-title").value = slide.title;
   element("script").value = slide.script;
   element("save-status").textContent = "All changes saved";
-  element("source-text").textContent = [slide.text || "No extracted text. Claude can still read the slide image.", slide.notes ? `SPEAKER NOTES\n${slide.notes}` : ""].filter(Boolean).join("\n\n");
+  element("source-text").textContent = [slide.text || "No extracted text. The script generator can still read the slide image.", slide.notes ? `SPEAKER NOTES\n${slide.notes}` : ""].filter(Boolean).join("\n\n");
   element("audio-preview").hidden = !slide.audio_ready;
   const player = element("audio-player");
   if (slide.audio_ready) {
     if (player.getAttribute("src") !== slide.audio_url) player.src = slide.audio_url;
-    const sources = { preview: "Mac preview · not your voice", indic_mio: "Indic-MIO narration", uploaded: "Your uploaded recording" };
+    const sources = { preview: "Mac preview · not your voice", indic_mio: "Indic-MIO narration", lux_tts: "LuxTTS narration", uploaded: "Your uploaded recording" };
     element("audio-source").textContent = `${sources[slide.audio_source] || ""} · ${durationLabel(slide.duration)}`;
   } else player.removeAttribute("src");
   countWords();
@@ -190,12 +192,17 @@ async function uploadDeck(files) {
 
 async function generateScripts(selectedOnly) {
   await saveScript();
-  if (!state.health.claude) { element("setup-dialog").showModal(); return; }
+  if (!state.health.scripts) { element("setup-dialog").showModal(); return; }
+  const provider = "Gemini";
   const slide = state.project.slides[state.slide];
-  if (selectedOnly && slide.script && !confirm("Replace this slide’s script? Its existing narration will be cleared. Claude API charges may apply.")) return;
-  if (!selectedOnly && !confirm("Send slides without scripts to Claude to generate explanations? API charges may apply.")) return;
-  const body = { instructions: element("instructions").value || "Explain clearly in English. Keep the explanation around 70 to 110 words." };
-  if (selectedOnly) body.slide_ids = [slide.id];
+  if (selectedOnly && slide.script && !confirm(`Send this slide to ${provider} and replace its script? Its existing narration will be cleared. API charges may apply.`)) return;
+  if (!selectedOnly) {
+    const replacing = state.project.slides.some((entry) => entry.script.trim() || entry.audio_ready);
+    const replacementNotice = replacing ? " Existing scripts will be replaced and their narration audio cleared." : "";
+    if (!confirm(`Generate scripts for all ${state.project.slides.length} slides with ${provider}?${replacementNotice} Slide content will be sent to ${provider}. API charges may apply.`)) return;
+  }
+  const body = { instructions: element("instructions").value || "Explain clearly in English. Keep the explanation around 70 to 100 words, using short sentences." };
+  body.slide_ids = selectedOnly ? [slide.id] : state.project.slides.map((entry) => entry.id);
   acceptProject(await api(`/api/projects/${state.project.id}/scripts`, { method: "POST", body }));
 }
 
@@ -209,11 +216,8 @@ function resetScriptPreview() {
 }
 
 function updateSplitHelp() {
-  const claude = element("split-method").value === "claude";
-  element("split-help").textContent = claude
-    ? "Preview sends your full script, slide images, extracted text, and speaker notes to Claude. API charges may apply. Your wording is preserved; review the matches before applying. Labelled scripts are split locally."
-    : "Keep each heading on its own line: Slide 1, then its narration, then Slide 2, and so on. Include every slide in order. No API key is needed.";
-  element("preview-script").textContent = claude ? "Match with Claude and preview" : "Preview slide assignments";
+  element("split-help").textContent = "Use a heading on its own line: Slide 1, then its narration, then Slide 2, and so on. Include every slide in order. This runs locally.";
+  element("preview-script").textContent = "Preview slide assignments";
 }
 
 function updateImportButtons() {
@@ -256,7 +260,7 @@ async function importAction(operation) {
 
 async function previewFullScript() {
   resetScriptPreview();
-  element("split-status").textContent = element("split-method").value === "claude" ? "Matching your script to the slides…" : "Splitting at slide headings…";
+  element("split-status").textContent = "Splitting at slide headings…";
   const preview = await api(`/api/projects/${fullScript.projectId}/scripts/preview`, {
     method: "POST", body: { script: element("full-script-input").value, method: element("split-method").value },
   });
@@ -284,22 +288,26 @@ async function applyFullScript() {
 async function generateAudio(selectedOnly) {
   await saveScript();
   const provider = element("voice-provider").value;
-  if (provider === "indic_mio" && !confirm("Generate narration with Indic-MIO? Your script and selected voice sample will be sent to your configured model server (your computer by default).")) return;
-  const useReference = element("reference-mode").value === "sample";
-  const body = { provider, voice_id: useReference ? "" : element("voice-id").value.trim(), speed: Number(element("voice-speed").value), consent: element("voice-consent").checked, use_reference: useReference };
+  const name = "LuxTTS";
+  const startupNotice = provider === "lux_tts" && state.health.lux_tts_autostart && !state.health.lux_tts ? " LuxTTS will start automatically; first use may install packages and download model weights." : "";
+  if (provider !== "preview" && !confirm(`Generate narration with ${name}? Your script and selected voice sample will be sent to your configured model server (your computer by default).${startupNotice}`)) return;
+  const useReference = provider === "lux_tts";
+  const body = { provider, voice_id: "", speed: Number(element("voice-speed").value), consent: element("voice-consent").checked, use_reference: useReference };
   if (selectedOnly) body.slide_ids = [state.project.slides[state.slide].id];
   acceptProject(await api(`/api/projects/${state.project.id}/audio`, { method: "POST", body }));
 }
 
 function voiceSourceChanged() {
-  const personal = element("voice-provider").value === "indic_mio";
-  element("personal-voice").hidden = !personal;
-  element("voice-help").textContent = personal ? "Run indic-mio.command to start the local model. Accent and similarity depend on your sample; audition one slide first. No speech API subscription is required." : `Free local Indian-English preview (${state.health.preview_voice || "Aman"}). This is not a clone of your voice.`;
+  const provider = element("voice-provider").value;
+  element("personal-voice").hidden = provider === "preview";
+  element("voice-help").textContent = provider === "lux_tts" ? "LuxTTS starts automatically. First use prepares the model; later slides reuse your voice sample. Audition one slide first." : "A free local Mac voice for quick previews. This does not clone your voice.";
 }
 
 function renderConnections() {
-  const connections = [["Claude scripts", state.health.claude], ["Indic-MIO server", state.health.indic_mio], ["PPTX rendering", state.health.pptx], ["Free Mac preview", state.health.preview]];
-  element("connection-status").innerHTML = connections.map(([name, ready]) => `<div class="connection">${name}<span class="${ready ? "ready" : ""}">${ready ? "✓ Ready" : "Not connected"}</span></div>`).join("");
+  const provider = "Gemini";
+  element("ai-one").textContent = `✧ Write with ${provider}`;
+  const connections = [["Gemini scripts", state.health.gemini], ["LuxTTS server", state.health.lux_tts], ["PowerPoint rendering", state.health.pptx]];
+  element("connection-status").innerHTML = connections.map(([name, ready]) => `<div class="connection">${name}<span class="${ready ? "ready" : ""}">${ready ? "✓ Ready" : name === "LuxTTS server" && state.health.lux_tts_autostart ? "Starts automatically" : "Not connected"}</span></div>`).join("");
 }
 
 for (const id of ["new-project", "sidebar-new", "empty-upload"]) element(id).addEventListener("click", () => element("deck-upload").click());
@@ -326,10 +334,7 @@ element("import-script").addEventListener("click", () => action(async () => {
   if (fullScript.projectId !== state.project.id) element("full-script-input").value = "";
   fullScript.projectId = state.project.id;
   resetScriptPreview();
-  const claudeOption = element("split-method").querySelector('[value="claude"]');
-  claudeOption.disabled = !state.health.claude;
-  claudeOption.textContent = state.health.claude ? "Match slide content with Claude" : "Match slide content with Claude · requires API key";
-  element("split-method").value = state.health.claude ? "claude" : "headings";
+  element("split-method").value = "headings";
   updateSplitHelp();
   element("full-script-dialog").showModal();
 }));
@@ -343,11 +348,6 @@ element("apply-script").addEventListener("click", () => importAction(applyFullSc
 element("audio-one").addEventListener("click", () => action(() => generateAudio(true)));
 element("generate-audio").addEventListener("click", () => action(() => generateAudio(false)));
 element("voice-provider").addEventListener("change", voiceSourceChanged);
-element("reference-mode").addEventListener("change", () => {
-  const sample = element("reference-mode").value === "sample";
-  element("sample-voice").hidden = !sample;
-  element("preset-voice").hidden = sample;
-});
 element("reference-upload").addEventListener("change", (event) => action(async () => {
   const file = event.target.files[0];
   event.target.value = "";
@@ -360,13 +360,6 @@ element("reference-upload").addEventListener("change", (event) => action(async (
   event.target.value = "";
 }));
 element("voice-speed").addEventListener("input", () => { element("speed-label").textContent = `${Number(element("voice-speed").value).toFixed(2).replace(/0$/, "")}×`; });
-element("load-voices").addEventListener("click", () => action(async () => {
-  const voices = await api("/api/voices");
-  element("voice-options").innerHTML = voices.map((voice) => `<option value="${escapeHtml(voice.id)}">${escapeHtml(voice.name)} · ${escapeHtml(voice.category)}</option>`).join("");
-  element("voice-id").focus();
-  if (!voices.length) throw new Error("This server has no presets. Choose ‘My own voice sample’ and upload a recording instead.");
-  element("voice-id").placeholder = `${voices.length} voices loaded — choose or paste an ID`;
-}));
 element("audio-upload").addEventListener("change", (event) => action(async () => {
   if (!event.target.files.length) return;
   await saveScript();
@@ -392,10 +385,9 @@ document.addEventListener("drop", (event) => { event.preventDefault(); document.
 
 async function initialize() {
   state.health = await api("/api/health");
-  element("voice-id").value = state.health.default_voice_id || "";
   if (!state.health.preview) {
     element("voice-provider").querySelector('[value="preview"]').disabled = true;
-    element("voice-provider").value = "indic_mio";
+    element("voice-provider").value = "lux_tts";
   }
   voiceSourceChanged();
   renderConnections();
