@@ -93,3 +93,26 @@ def test_parallel_download_resumes_completed_chunks(tmp_path, monkeypatch):
     desktop_setup.download_ranges("https://example.invalid", target, len(content), checksum, chunk_size=16)
     assert target.read_bytes() == content
     assert requests == [16]
+
+
+def test_prepare_office_uses_extended_windows_timeout(tmp_path, monkeypatch):
+    import app.desktop_settings as desktop_settings
+
+    monkeypatch.setattr(desktop_setup.media, "soffice", lambda: None)
+    monkeypatch.setattr(desktop_setup.sys, "platform", "win32")
+    monkeypatch.setattr(desktop_setup, "verified_download", lambda *a, **k: None)
+    monkeypatch.setattr(desktop_setup, "desktop_directories", lambda: {"cache": tmp_path})
+    monkeypatch.setattr(desktop_settings, "save_settings", lambda *a, **k: None)
+    calls = []
+
+    def fake_run_child(command, **kwargs):
+        calls.append((command, kwargs))
+        if command[0] == "msiexec.exe":
+            renderer = tmp_path / "libreoffice" / desktop_setup.OFFICE_VERSION / "program" / "soffice.exe"
+            renderer.parent.mkdir(parents=True, exist_ok=True)
+            renderer.write_bytes(b"")
+
+    monkeypatch.setattr(desktop_setup, "run_child", fake_run_child)
+    desktop_setup.prepare_office()
+    assert calls[0][0][0] == "msiexec.exe"
+    assert calls[0][1]["timeout"] == desktop_setup.OFFICE_PREPARE_TIMEOUT_SECONDS
