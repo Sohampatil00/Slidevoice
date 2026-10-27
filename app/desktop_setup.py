@@ -3,10 +3,13 @@
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
+import threading
 import time
-from urllib.request import urlopen
+from concurrent.futures import ThreadPoolExecutor
+from urllib.request import Request, urlopen
 
 import psutil
 from filelock import FileLock
@@ -66,23 +69,83 @@ def verified_download(url, destination, checksum):
                 return
     partial = destination.with_suffix(destination.suffix + ".part")
     try:
-        with urlopen(url, timeout=60) as response, partial.open("wb") as output:
-            total = int(response.headers.get("Content-Length", 0))
-            received = 0
-            last_report = 0
-            while chunk := response.read(1024 * 1024):
-                output.write(chunk)
-                received += len(chunk)
-                if time.monotonic() - last_report > 5:
-                    progress = f"{received // 1048576} MB" + (f" of {total // 1048576} MB" if total else "")
-                    report("running", f"Downloading PowerPoint support: {progress}…")
-                    last_report = time.monotonic()
+        with urlopen(Request(url, headers={"Range": "bytes=0-0"}), timeout=60) as probe:
+            ranged = getattr(probe, "status", 200) == 206
+            total = int(probe.headers.get("Content-Range", "0/0").split("/")[-1]) if ranged else 0
+            source = probe.geturl() if ranged else url
+        if ranged and total:
+            download_ranges(source, partial, total, checksum)
+        else:
+            download_sequential(url, partial)
         with partial.open("rb") as download:
             if hashlib.file_digest(download, "sha256").hexdigest() != checksum:
+                shutil.rmtree(
+                    partial.with_name(partial.name + ".chunks-" + checksum[:12]), ignore_errors=True
+                )
                 raise RuntimeError("LibreOffice download checksum did not match. Please retry setup.")
         partial.replace(destination)
+        shutil.rmtree(partial.with_name(partial.name + ".chunks-" + checksum[:12]), ignore_errors=True)
     finally:
         partial.unlink(missing_ok=True)
+
+
+def download_sequential(url, partial):
+    with urlopen(url, timeout=60) as response, partial.open("wb") as output:
+        total = int(response.headers.get("Content-Length", 0))
+        received = 0
+        last_report = 0
+        while chunk := response.read(1024 * 1024):
+            output.write(chunk)
+            received += len(chunk)
+            if time.monotonic() - last_report > 5:
+                progress = f"{received // 1048576} MB" + (f" of {total // 1048576} MB" if total else "")
+                report("running", f"Downloading PowerPoint support: {progress}…")
+                last_report = time.monotonic()
+
+
+def download_ranges(url, partial, total, checksum, chunk_size=8 * 1024 * 1024):
+    chunks = partial.with_name(partial.name + ".chunks-" + checksum[:12])
+    chunks.mkdir(exist_ok=True)
+    lock = threading.Lock()
+    completed = 0
+
+    def fetch(first):
+        nonlocal completed
+        last = min(first + chunk_size, total) - 1
+        path = chunks / str(first)
+        if not path.is_file() or path.stat().st_size != last - first + 1:
+            temporary = path.with_suffix(".tmp")
+            for attempt in range(3):
+                try:
+                    request = Request(url, headers={"Range": f"bytes={first}-{last}"})
+                    with urlopen(request, timeout=60) as response, temporary.open("wb") as output:
+                        expected_range = f"bytes {first}-{last}/{total}"
+                        if response.status != 206 or response.headers.get("Content-Range") != expected_range:
+                            raise RuntimeError("The download server returned an invalid range. Retry setup.")
+                        shutil.copyfileobj(response, output, length=1024 * 1024)
+                    if temporary.stat().st_size != last - first + 1:
+                        raise RuntimeError("A download chunk was incomplete. Retry setup.")
+                    temporary.replace(path)
+                    break
+                except (OSError, RuntimeError):
+                    temporary.unlink(missing_ok=True)
+                    if attempt == 2:
+                        raise
+                    time.sleep(2**attempt)
+        with lock:
+            completed += path.stat().st_size
+            report(
+                "running",
+                f"Downloading PowerPoint support: {completed // 1048576} MB of {total // 1048576} MB…",
+            )
+        return path
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        paths = list(pool.map(fetch, range(0, total, chunk_size)))
+    with partial.open("wb") as output:
+        for path in paths:
+            with path.open("rb") as piece:
+                shutil.copyfileobj(piece, output)
 
 
 def run_child(command, **options):

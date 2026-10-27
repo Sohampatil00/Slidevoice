@@ -57,3 +57,39 @@ def test_setup_routes_require_desktop(client, monkeypatch):
     assert client.post("/api/desktop/setup").status_code == 404
     monkeypatch.setenv("SLIDEVOICE_DESKTOP", "1")
     assert client.get("/api/desktop/setup").json()["status"] == "not_started"
+
+
+def test_parallel_download_resumes_completed_chunks(tmp_path, monkeypatch):
+    from urllib.error import URLError
+
+    content = b"0123456789abcdef" * 8
+    broken = True
+    requests = []
+
+    class Response(io.BytesIO):
+        status = 206
+
+        def __init__(self, first, last):
+            super().__init__(content[first : last + 1])
+            self.headers = {"Content-Range": f"bytes {first}-{last}/{len(content)}"}
+
+    def fetch(request, **kwargs):
+        first, last = map(int, request.get_header("Range").split("=")[1].split("-"))
+        requests.append(first)
+        if broken and first == 16:
+            raise URLError("connection interrupted")
+        return Response(first, last)
+
+    monkeypatch.setattr(desktop_setup, "urlopen", fetch)
+    monkeypatch.setattr(desktop_setup.time, "sleep", lambda _: None)
+    target = tmp_path / "office.part"
+    checksum = hashlib.sha256(content).hexdigest()
+    with pytest.raises(URLError):
+        desktop_setup.download_ranges(
+            "https://example.invalid", target, len(content), checksum, chunk_size=16
+        )
+    broken = False
+    requests.clear()
+    desktop_setup.download_ranges("https://example.invalid", target, len(content), checksum, chunk_size=16)
+    assert target.read_bytes() == content
+    assert requests == [16]
