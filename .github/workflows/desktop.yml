@@ -61,6 +61,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/test_windows_installer.ps1
+      - name: Collect Windows runtime logs
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force .desktop-build/windows-runtime-logs | Out-Null
+          Copy-Item "$env:LOCALAPPDATA/SlideVoice/data/logs/*" .desktop-build/windows-runtime-logs/ -ErrorAction SilentlyContinue
       - name: Upload build diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -69,7 +75,7 @@ jobs:
           include-hidden-files: true
           path: |
             .desktop-build/windows-installer-test/
-            ~/AppData/Local/SlideVoice/data/logs/
+            .desktop-build/windows-runtime-logs/
       - uses: actions/upload-artifact@v4
         with:
           name: SlideVoice-${{ runner.os }}
