@@ -46,10 +46,16 @@ jobs:
           $p = Start-Process dist/SlideVoice/SlideVoice.exe -ArgumentList '--smoke-test' -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Packaged backend failed: $($p.ExitCode)" }
       - name: Verify Windows LuxTTS runtime installation
+        timeout-minutes: 15
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $p = Start-Process dist/SlideVoice/SlideVoice.exe -ArgumentList '--prepare-lux-runtime' -Wait -PassThru
+          $p = Start-Process dist/SlideVoice/SlideVoice.exe -ArgumentList '--prepare-lux-runtime' -PassThru
+          while (-not $p.WaitForExit(10000)) {
+            Get-Content "$env:LOCALAPPDATA/SlideVoice/data/logs/desktop.log" -Tail 8 -ErrorAction SilentlyContinue
+          }
+          $p.Refresh()
+          Get-Content "$env:LOCALAPPDATA/SlideVoice/data/logs/desktop.log" -Tail 50 -ErrorAction SilentlyContinue
           if ($p.ExitCode -ne 0) { throw "LuxTTS installation failed: $($p.ExitCode)" }
       - name: Test Windows installer and preserved user data
         if: runner.os == 'Windows'

@@ -8,7 +8,8 @@ if not getattr(sys, "frozen", False):
 
 from app.platform_paths import configure_desktop_environment
 
-if __name__ == "__main__":
+
+def main():
     paths = configure_desktop_environment()
     log_path = paths["data"] / "logs" / "desktop.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -22,14 +23,19 @@ if __name__ == "__main__":
         raise SystemExit(main())
     elif "--prepare-lux-runtime" in sys.argv:
         import subprocess
+        from functools import partial
 
         from app.lux_bootstrap import prepare_runtime
 
-        python, worker = prepare_runtime()
+        python, worker = prepare_runtime(
+            run=partial(subprocess.run, stdout=sys.stdout, stderr=sys.stderr)
+        )
         raise SystemExit(
             subprocess.call(
                 [str(python), "-c", "from zipvoice.luxvoice import LuxTTS; import torch, soundfile"],
                 cwd=worker,
+                stdout=sys.stdout,
+                stderr=sys.stderr,
             )
         )
     elif "--backend" in sys.argv:
@@ -41,3 +47,13 @@ if __name__ == "__main__":
         from app.desktop import main
 
         raise SystemExit(main(smoke="--smoke-test" in sys.argv))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        import traceback
+
+        traceback.print_exc(file=sys.stderr)
+        raise SystemExit(1) from None
