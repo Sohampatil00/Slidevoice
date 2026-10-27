@@ -19,6 +19,13 @@ $installation = Join-Path $sandbox 'Installed app'
 $previousLocalAppData = $env:LOCALAPPDATA
 $env:LOCALAPPDATA = Join-Path $sandbox 'User data'
 New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+# Reuse only CI's prepared component cache, keeping test projects/config isolated.
+$sharedCache = Join-Path $env:LOCALAPPDATA 'SlideVoice/Cache'
+$preparedCache = Join-Path $previousLocalAppData 'SlideVoice/Cache'
+if (Test-Path $preparedCache) {
+    New-Item -ItemType Directory -Path (Split-Path $sharedCache) -Force | Out-Null
+    New-Item -ItemType Junction -Path $sharedCache -Target $preparedCache | Out-Null
+}
 
 function Invoke-CheckedProcess {
     param([string]$File, [string[]]$Arguments, [int]$TimeoutSeconds = 180)
@@ -32,8 +39,10 @@ function Invoke-CheckedProcess {
 }
 
 try {
-    Invoke-CheckedProcess $Installer @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS=""',
-        "/DIR=`"$installation`"", "/LOG=`"$(Join-Path $OutputDirectory 'install.log')`"")
+    Invoke-CheckedProcess $Installer @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/TASKS="dependencies"',
+        "/DIR=`"$installation`"", "/LOG=`"$(Join-Path $OutputDirectory 'install.log')`"") -TimeoutSeconds 1800
+    $setupResult = Get-Content (Join-Path $env:LOCALAPPDATA 'SlideVoice/data/setup-status.json') -Raw | ConvertFrom-Json
+    if ($setupResult.status -ne 'complete') { throw 'The installer did not finish preparing components.' }
     $executable = Join-Path $installation 'SlideVoice.exe'
     if (-not (Test-Path $executable)) { throw 'The installer did not install SlideVoice.exe.' }
     $info = (Get-Item $executable).VersionInfo
@@ -59,12 +68,15 @@ try {
     if (Test-Path $executable) { throw 'Uninstalling left the installed executable behind.' }
     if (-not (Test-Path $marker)) { throw 'Uninstalling removed user data.' }
     @{status='passed'; version=$release.version; checks=@('install', 'branding',
-        'packaged-backend', 'upgrade', 'uninstall', 'preserved-user-data')} |
+        'automatic-component-setup', 'packaged-backend', 'upgrade', 'uninstall', 'preserved-user-data')} |
         ConvertTo-Json | Set-Content (Join-Path $OutputDirectory 'result.json')
     Write-Output 'Windows installer, upgrade, packaged backend and data-preservation checks passed.'
 } finally {
     $logs = Join-Path $env:LOCALAPPDATA 'SlideVoice/data/logs'
     if (Test-Path $logs) { Copy-Item $logs (Join-Path $OutputDirectory 'app-logs') -Recurse -Force }
+    if ((Test-Path $sharedCache) -and ((Get-Item $sharedCache).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        [IO.Directory]::Delete($sharedCache)
+    }
     $env:LOCALAPPDATA = $previousLocalAppData
     # Only remove this test-created sandbox, never an actual installation or user-data directory.
     if (Test-Path $sandbox) { Remove-Item $sandbox -Recurse -Force }

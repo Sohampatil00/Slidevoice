@@ -26,7 +26,7 @@ Name: "{autoprograms}\SlideVoice"; Filename: "{app}\SlideVoice.exe"; IconFilenam
 Name: "{autodesktop}\SlideVoice"; Filename: "{app}\SlideVoice.exe"; Tasks: desktopicon; IconFilename: "{app}\SlideVoice.exe"; AppUserModelID: "org.slidevoice.desktop"
 [Tasks]
 Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked
-Name: dependencies; Description: "Download and prepare local narration and PowerPoint support (internet required)"; Flags: checkedonce
+Name: dependencies; Description: "Download and prepare local narration and PowerPoint support (internet required)"
 [Run]
 Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "Preparing Microsoft WebView2…"; Flags: waituntilterminated; Check: NeedsWebView2
 Filename: "{app}\SlideVoice.exe"; Parameters: "--install-dependencies"; StatusMsg: "Downloading and preparing narration models and PowerPoint support. This may take several minutes..."; Flags: runhidden waituntilterminated; Tasks: dependencies; AfterInstall: CheckDependencies
