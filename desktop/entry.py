@@ -23,13 +23,10 @@ def main():
         raise SystemExit(main())
     elif "--prepare-lux-runtime" in sys.argv:
         import subprocess
-        from functools import partial
 
         from app.lux_bootstrap import prepare_runtime
 
-        python, worker = prepare_runtime(
-            run=partial(subprocess.run, stdout=sys.stdout, stderr=sys.stderr)
-        )
+        python, worker = prepare_runtime()
         raise SystemExit(
             subprocess.call(
                 [str(python), "-c", "from zipvoice.luxvoice import LuxTTS; import torch, soundfile"],

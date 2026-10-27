@@ -87,6 +87,7 @@ def main():
         "pip",
         "compile",
         "requirements-lux.txt",
+        "--emit-find-links",
         "--python-version",
         "3.12",
         "--output-file",

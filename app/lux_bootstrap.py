@@ -37,7 +37,15 @@ def runtime_inputs():
     return requirements, worker, environment
 
 
-def prepare_runtime(run=subprocess.run):
+def runtime_command(command, **options):
+    # Windowed bundles have no console handles; send child diagnostics to the app log.
+    if not options.get("capture_output"):
+        options.setdefault("stdout", sys.stdout)
+        options.setdefault("stderr", sys.stderr)
+    return subprocess.run(command, **options)
+
+
+def prepare_runtime(run=runtime_command):
     requirements, worker, environment = runtime_inputs()
     uv = find_uv()
     python = python_in_environment(environment)
@@ -81,7 +89,9 @@ def main():
         raise ValueError("Invalid LuxTTS port")
     command = [str(python), "-m", "uvicorn", "app.lux_server:app", "--host", "127.0.0.1", "--port", str(port)]
     print("Starting the local LuxTTS worker.", flush=True)
-    return subprocess.call(command, cwd=worker, env=environment)
+    return subprocess.call(
+        command, cwd=worker, env=environment, stdout=sys.stdout, stderr=sys.stderr
+    )
 
 
 if __name__ == "__main__":
