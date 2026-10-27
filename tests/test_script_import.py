@@ -205,7 +205,12 @@ def test_invalid_apply_cannot_partially_save(client, project, invalid):
     assert core.read_project(project["id"])["updated_at"] == project["updated_at"]
 
 
-def test_stale_preview_rejected(client, project):
+@pytest.mark.parametrize("clock_offset", [0, -60], ids=["same-clock-tick", "clock-moved-back"])
+def test_stale_preview_rejected(client, project, monkeypatch, clock_offset):
+    from datetime import datetime, timedelta
+
+    fixed = (datetime.fromisoformat(project["updated_at"]) + timedelta(seconds=clock_offset)).isoformat()
+    monkeypatch.setattr(core, "now", lambda: fixed)
     preview = client.post(endpoint(project, "preview"), json={"script": labelled(["A", "B", "C"])}).json()
     client.patch(
         f"/api/projects/{project['id']}/slides/slide-001",

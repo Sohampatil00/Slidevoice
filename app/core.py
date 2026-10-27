@@ -3,7 +3,7 @@ import os
 import re
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -42,7 +42,11 @@ def project_lock(project_id):
 
 
 def save_project(project):
-    project["updated_at"] = now()
+    updated = datetime.fromisoformat(now())
+    if previous := project.get("updated_at"):
+        # Windows clocks can return the same timestamp for consecutive edits.
+        updated = max(updated, datetime.fromisoformat(previous) + timedelta(microseconds=1))
+    project["updated_at"] = updated.isoformat()
     folder = project_dir(project["id"])
     temporary = folder / f".{uuid.uuid4().hex}.json"
     temporary.write_text(json.dumps(project, indent=2), encoding="utf-8")
