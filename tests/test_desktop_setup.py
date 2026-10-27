@@ -49,6 +49,15 @@ def test_completed_setup_is_not_repeated(monkeypatch):
     desktop_setup.prepare_all()
 
 
+def test_stale_setup_owner_is_replaced(monkeypatch):
+    owner = core.DATA / "setup-owner.lock"
+    owner.write_text("999999999", encoding="ascii")
+    desktop_setup.report("complete", "Local components are ready.")
+    monkeypatch.setattr(desktop_setup.lux_bootstrap, "prepare_runtime", lambda: pytest.fail("setup repeated"))
+    desktop_setup.prepare_all()
+    assert not owner.exists()
+
+
 def test_interrupted_setup_is_retryable():
     desktop_setup.report("running", "Preparing")
     value = json.loads(desktop_setup.status_path().read_text())

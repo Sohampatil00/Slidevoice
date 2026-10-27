@@ -9,10 +9,10 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from urllib.request import Request, urlopen
 
 import psutil
-from filelock import FileLock
 
 from . import core, lux_bootstrap, media, processes
 from .platform_paths import desktop_directories
@@ -60,6 +60,34 @@ def report(status, message):
     temporary.write_text(json.dumps(value), encoding="utf-8")
     temporary.replace(path)
     print(message, flush=True)
+
+
+@contextmanager
+def setup_owner():
+    """Keep one dependency preparation process active across Windows launches."""
+    owner = core.DATA / "setup-owner.lock"
+    while True:
+        try:
+            descriptor = os.open(owner, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            try:
+                pid = int(owner.read_text(encoding="ascii"))
+                active = psutil.pid_exists(pid)
+            except (OSError, ValueError):
+                active = False
+            if not active:
+                owner.unlink(missing_ok=True)
+                continue
+            time.sleep(1)
+            continue
+        else:
+            with os.fdopen(descriptor, "w", encoding="ascii") as output:
+                output.write(str(os.getpid()))
+            break
+    try:
+        yield
+    finally:
+        owner.unlink(missing_ok=True)
 
 
 def verified_download(url, destination, checksum):
@@ -206,8 +234,7 @@ def prepare_office():
 
 
 def prepare_all():
-    lock = FileLock(core.DATA / "setup.lock")
-    with lock.acquire(timeout=3600):
+    with setup_owner():
         if read_status()["status"] == "complete":
             return
         try:
