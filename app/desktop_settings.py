@@ -42,7 +42,10 @@ def save_settings(settings: DesktopSettings, *, extra_updates=None):
         if any(ord(character) < 32 or character in "'\\" for character in value):
             raise HTTPException(status_code=400, detail="The API key contains invalid characters.")
         updates["GEMINI_API_KEY"] = value.strip()
-    with _lock:
+    from filelock import FileLock
+
+    core.CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with _lock, FileLock(str(core.CONFIG_FILE) + ".lock"):
         values = dict(dotenv_values(core.CONFIG_FILE)) if core.CONFIG_FILE.exists() else {}
         values.update(updates)
         temporary = Path(str(core.CONFIG_FILE) + ".tmp")
